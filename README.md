@@ -22,13 +22,15 @@ Issues and contributions are welcome on this repository.
 
 ## Download
 
-- **Current versions**: grab the binaries from the
-  [Releases page](https://github.com/manuel-masiello/Gribouillot/releases). They are built
-  automatically from the sources by the [CI workflow](.github/workflows/build.yml)
-  (AppImage for Linux, zip for Windows, dmg for macOS).
-- **Legacy version 2.0**: the files in [`bin/`](bin/) (`Gribouillot_2.0_linux64.AppImage`,
-  `Gribouillot_2.0_win32.zip`) are the **old binaries built by the upstream project** around
-  2018-2020, with Qt5. They are kept for reference; see [`bin/README.md`](bin/README.md).
+**Latest release: [v2.1.0](https://github.com/manuel-masiello/Gribouillot/releases/tag/v2.1.0)** —
+binaries for Linux (AppImage), Windows (zip) and macOS (dmg), built automatically from the
+sources by the [CI workflow](.github/workflows/build.yml). All releases are listed on the
+[Releases page](https://github.com/manuel-masiello/Gribouillot/releases).
+
+The legacy 2.0 binaries built by the upstream project (Qt5, 2018-2020) were removed from the
+repository; they remain available in the
+[upstream project](https://github.com/Fr3nchK1ss/Gribouillot/tree/master/bin) and in this
+repository's git history.
 
 ## Build Instructions
 
