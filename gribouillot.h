@@ -199,6 +199,8 @@ private slots:
     void on_actionCircleSelectDiameter_triggered();
     void on_actionCircleTriangle_triggered();
 
+    void on_actionEllipseFoci_triggered();
+
     void on_actionArcFromCircle_triggered();
     void on_actionArc_triggered();
 

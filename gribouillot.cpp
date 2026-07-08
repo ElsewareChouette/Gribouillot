@@ -115,6 +115,8 @@ Gribouillot::Gribouillot(QWidget *parent) :
     drawingGroup->addAction(ui->actionCircleSelectDiameter);
     drawingGroup->addAction(ui->actionCircleTriangle);
 
+    drawingGroup->addAction(ui->actionEllipseFoci);
+
     drawingGroup->addAction(ui->actionArcFromCircle);
     drawingGroup->addAction(ui->actionArc);
 

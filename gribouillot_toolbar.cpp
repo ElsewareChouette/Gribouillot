@@ -311,6 +311,17 @@ void Gribouillot::newSceneClickPostSelect(QPointF position)
             }
             break;
 
+        case ELLIPSE_FROMFOCI:
+            if (!moreCoordsNeeded(position))
+            {
+                center =
+                currentLayer->drawEllipseFromFoci(drawingColor, drawingWidth,
+                                                  drawingCoords, scale, scaleUnit);
+
+                on_actionEllipseFoci_triggered();//reset drawing tool
+            }
+            break;
+
         case ARC_FROMCIRCLE:
             if ( mG == nullptr || mG->type() != ARC_DRAWER )
             {
@@ -511,6 +522,11 @@ void Gribouillot::keyTFromScene()
                  Item_circle* c = qgraphicsitem_cast<Item_circle*>(item);
                  c->newPen(c->pen().color(), width);
                 }
+                else if (item->type() == ELLIPSE)
+                {
+                 Item_ellipse* e = qgraphicsitem_cast<Item_ellipse*>(item);
+                 e->newPen(e->pen().color(), width);
+                }
                 else if (item->type() == ARC)
                 {
                  Item_arc* a = qgraphicsitem_cast<Item_arc*>(item);
@@ -564,6 +580,9 @@ void Gribouillot::keyEscFromScene()
             break;
         case CIRCLE_FROMTRIANGLE:
             on_actionCircleTriangle_triggered();
+            break;
+        case ELLIPSE_FROMFOCI:
+            on_actionEllipseFoci_triggered();
             break;
         case ARC:
             on_actionArc_triggered();
@@ -638,6 +657,14 @@ void Gribouillot::sceneSelectionChanged() const
             statusMsg = circle->status(scale, scaleUnit);
             if(gpsEnabled)
                 statusMsg += tr("    Center: ")+gpsDialog->getFix(circle->pos());
+
+        }
+        else if( item->type() == ELLIPSE )
+        {
+            Item_ellipse* ellipse = qgraphicsitem_cast<Item_ellipse *>(item);
+            statusMsg = ellipse->status(scale, scaleUnit);
+            if(gpsEnabled)
+                statusMsg += tr("    Center: ")+gpsDialog->getFix(ellipse->pos());
 
         }
         else if( item->type() == ARC )
@@ -911,6 +938,11 @@ void Gribouillot::on_actionChooseColor_triggered()
                 {
                     Item_circle* c = qgraphicsitem_cast<Item_circle*>(item);
                     c->newPen(color, c->pen().width());
+                }
+                else if (item->type() == ELLIPSE)
+                {
+                    Item_ellipse* e = qgraphicsitem_cast<Item_ellipse*>(item);
+                    e->newPen(color, e->pen().width());
                 }
                 else if (item->type() == ARC)
                 {
@@ -1259,6 +1291,23 @@ void Gribouillot::on_actionCircleTriangle_triggered()
     else
         //The user must pick up 3 points
         statusBar()->showMessage(drawingTips[0]);
+
+}
+
+
+/**
+ * @brief   Draw an ellipse given its 2 foci and the sum of the distances
+ *          from the ellipse to the foci
+ */
+void Gribouillot::on_actionEllipseFoci_triggered()
+{
+    setDrawingView();
+    scene->clearSelection();
+    currentDrawing = ELLIPSE_FROMFOCI;
+    drawingTips = {tr("Ellipse: define a first focus."),
+                   tr("Ellipse: define the second focus.")};
+
+    statusBar()->showMessage(drawingTips[0]);
 
 }
 

@@ -18,6 +18,7 @@
 #include "item_arc.h"
 #include "item_arcdrawer.h"
 #include "item_circle.h"
+#include "item_ellipse.h"
 #include "item_pixmap.h"
 #include "item_point.h"
 #include "item_pointonrail.h"
@@ -81,6 +82,12 @@ public:
     QPointF drawCircleFromDiameter(QColor penColor, int penWidth, QVector<QPointF> positions);
     QPointF drawCircleFromTriangle(QColor penColor, int penWidth);
     QPointF drawCircleFromTriangle(QColor penColor, int penWidth, QVector<QPointF> positions);
+
+    //Ellipses drawing
+    void drawEllipse(QColor penColor, int penWidth, QPointF focus1, QPointF focus2,
+                     qreal dSum);
+    QPointF drawEllipseFromFoci(QColor penColor, int penWidth, QVector<QPointF> positions,
+                                qreal scale, QString scaleUnit);
 
     //Arcs drawing
     QPointF drawArc(QColor penColor, int penWidth, QPointF center, qreal radius,

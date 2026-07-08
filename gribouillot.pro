@@ -22,6 +22,7 @@ SOURCES += \
     dlg_changelayername.cpp \
     dlg_changemap.cpp \
     dlg_circleradius.cpp \
+    dlg_ellipsesum.cpp \
     dlg_importlayer.cpp \
     dlg_newgribproject.cpp \
     dlg_penthickness.cpp \
@@ -31,6 +32,7 @@ SOURCES += \
     item_arc.cpp \
     item_arcdrawer.cpp \
     item_circle.cpp \
+    item_ellipse.cpp \
     item_line.cpp \
     item_pixmap.cpp \
     item_point.cpp \
@@ -60,6 +62,7 @@ HEADERS += \
     dlg_changelayername.h \
     dlg_changemap.h \
     dlg_circleradius.h \
+    dlg_ellipsesum.h \
     dlg_importlayer.h \
     dlg_newgribproject.h \
     dlg_penthickness.h \
@@ -69,6 +72,7 @@ HEADERS += \
     item_arc.h \
     item_arcdrawer.h \
     item_circle.h \
+    item_ellipse.h \
     item_line.h \
     item_pixmap.h \
     item_point.h \
@@ -94,6 +98,7 @@ FORMS += \
     dlg_changelayername.ui \
     dlg_changemap.ui \
     dlg_circleradius.ui \
+    dlg_ellipsesum.ui \
     dlg_importlayer.ui \
     dlg_newgribproject.ui \
     dlg_penthickness.ui \

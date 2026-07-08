@@ -19,6 +19,7 @@
 #include "dlg_centerofmass.h"
 #include "dlg_changelayername.h"
 #include "dlg_circleradius.h"
+#include "dlg_ellipsesum.h"
 #include "dlg_pointweight.h"
 #include "gribouillotlayer.h"
 #include "main.h"
@@ -231,6 +232,11 @@ void GribouillotLayer::loadXML(QString path)
     for (int i=0; i < circles.size();  ++i)
         addItemToLayer( new Item_circle(circles.item(i).toElement()) );
 
+    /* Constructs ELLIPSES graphics items */
+    QDomNodeList ellipses = doc.elementsByTagName("Ellipse");
+    for (int i=0; i < ellipses.size();  ++i)
+        addItemToLayer( new Item_ellipse(ellipses.item(i).toElement()) );
+
     /* Constructs ARCS graphics items */
     QDomNodeList arcs = doc.elementsByTagName("Arc");
     for (int i=0; i < arcs.size();  ++i)
@@ -315,6 +321,13 @@ bool GribouillotLayer::writeXML()
         {
             Item_circle* circle = qgraphicsitem_cast<Item_circle*>(item);
             circle->serialize2xml(&xW);
+        }
+
+        //Item_ellipse
+        if( item->type() == ELLIPSE )
+        {
+            Item_ellipse* ellipse = qgraphicsitem_cast<Item_ellipse*>(item);
+            ellipse->serialize2xml(&xW);
         }
 
         //Item_arc
@@ -894,6 +907,61 @@ QPointF GribouillotLayer::drawCircleFromTriangle(QColor penColor, int penWidth, 
         qreal radius = QLineF(center, positions[0]).length();
 
         drawCircle(penColor, penWidth, center, radius);
+    }
+
+    return center;
+
+}
+
+
+
+/* ELLIPSES DRAWINGS */
+
+/**
+ * @brief   draw an ellipse from its 2 foci and the sum of distances
+ * @details called by drawEllipseFromFoci() or directly upon loading XML data.
+ */
+void GribouillotLayer::drawEllipse(QColor penColor, int penWidth, QPointF focus1,
+                                   QPointF focus2, qreal dSum)
+{
+    addItemToLayer(new Item_ellipse(penColor, penWidth, focus1, focus2, dSum));
+
+}
+
+
+/**
+ * @brief   draw an ellipse from its 2 foci and the sum of distances
+ *          given by user (opens a dialog)
+ * @return  the position of the ellipse center in scene coordinates
+ */
+QPointF GribouillotLayer::drawEllipseFromFoci(QColor penColor, int penWidth,
+                                              QVector<QPointF> positions,
+                                              qreal scale, QString scaleUnit)
+{
+    QLineF58 focalAxis(positions[0], positions[1]);
+    QPointF center = focalAxis.center();
+
+    Dlg_ellipseSum dialog(this, scaleUnit);
+    qreal dSum = 0;
+
+    if (dialog.exec() == QDialog::Accepted)
+        dSum = dialog.getSumValue();
+
+    if (dSum != 0 && scale != 0)
+    {
+        /**
+         * convert the sum of distances from kilometers to pixels, scale
+         * being the km/px scale.
+         */
+        dSum *= 1.0/scale;
+
+        if (dSum > focalAxis.length())
+            drawEllipse(penColor, penWidth, positions[0], positions[1], dSum);
+        else
+            QMessageBox::warning(this, tr("Drawing error"),
+                                 tr("The sum of distances must be greater than "
+                                    "the distance between the 2 foci."),
+                                 QMessageBox::Ok);
     }
 
     return center;

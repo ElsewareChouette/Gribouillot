@@ -145,6 +145,8 @@
    <addaction name="actionCircleSelectDiameter"/>
    <addaction name="actionCircleTriangle"/>
    <addaction name="separator"/>
+   <addaction name="actionEllipseFoci"/>
+   <addaction name="separator"/>
    <addaction name="actionArcFromCircle"/>
    <addaction name="actionArc"/>
    <addaction name="separator"/>
@@ -576,6 +578,21 @@
    </property>
    <property name="toolTip">
     <string>Automatically copy pixmaps to project folder</string>
+   </property>
+  </action>
+  <action name="actionEllipseFoci">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="icon">
+    <iconset resource="gribouillot.qrc">
+     <normaloff>:/Resources/Icons/ellipse-foci.png</normaloff>:/Resources/Icons/ellipse-foci.png</iconset>
+   </property>
+   <property name="text">
+    <string>Ellipse from foci</string>
+   </property>
+   <property name="toolTip">
+    <string>Draw an ellipse given its 2 foci and the sum of the distances to the foci</string>
    </property>
   </action>
   <action name="actionArc">

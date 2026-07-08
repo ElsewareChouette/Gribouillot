@@ -44,6 +44,9 @@ enum GribouillotItem {
 
                       PIXMAP = QGraphicsItem::UserType + 50,
 
+                      ELLIPSE = QGraphicsItem::UserType + 55,
+                      ELLIPSE_FROMFOCI = QGraphicsItem::UserType + 56,
+
                       SCALERULER = QGraphicsItem::UserType + 60
                      };
 
