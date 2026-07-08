@@ -15,6 +15,7 @@
 #include <QtMath>
 #include <QtWidgets>
 #include <QtDebug>
+#include <QImageReader>
 
 #include "ui_gribouillot.h"
 #include "ui_maptabwidget.h"
@@ -131,6 +132,11 @@ Gribouillot::Gribouillot(QWidget *parent) :
 
     //TODO: implement GPS
     ui->mapTabWidget->ui->gpsTlBtt->setVisible(false);
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    //Raise the Qt6 image allocation limit (128MB by default) to load large maps
+    QImageReader::setAllocationLimit(512);
+#endif
 
     show();
 

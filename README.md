@@ -88,6 +88,36 @@ qmake gribouillot.pro
 bin\gribouillot.exe
 ```
 
+### macOS
+
+#### Prerequisites
+Install Qt with Homebrew:
+```sh
+brew install qt
+```
+
+For Qt5 (alternative):
+```sh
+brew install qt@5
+export PATH="$(brew --prefix qt@5)/bin:$PATH"
+```
+
+#### Compilation
+1. Navigate to the project directory and generate the Makefile:
+```sh
+qmake gribouillot.pro
+```
+
+2. Compile the project:
+```sh
+make -j$(sysctl -n hw.ncpu)
+```
+
+3. Run the application:
+```sh
+open bin/gribouillot.app
+```
+
 ## Project Structure
 - **Source files**: `*.cpp` files containing the implementation
 - **Header files**: `*.h` files containing class declarations
@@ -101,6 +131,9 @@ bin\gribouillot.exe
 ### Linux
 - If `qmake6` is not found, try `qmake` or `qmake-qt6`
 - Make sure Qt XML module is installed: `sudo apt install libqt6xml6`
+
+### macOS
+- If `qmake` is not found with Qt5, make sure `qt@5` is in your PATH (it is keg-only in Homebrew)
 
 ### Windows
 - Make sure the Qt bin directory is in your PATH
