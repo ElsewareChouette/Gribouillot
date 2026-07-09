@@ -25,8 +25,8 @@ ZoomableGraphicsView::ZoomableGraphicsView(QWidget * parent) : QGraphicsView(par
     scaleBar = new ScaleBar(this);
     currentZoom = 1;
 
-    //Black margin around the background map (see setMapRect)
-    setBackgroundBrush(Qt::black);
+    //White margin around the background map (see setMapRect)
+    setBackgroundBrush(Qt::white);
 
     //see also the Designer for other UI properties of the GraphicsView.
 
