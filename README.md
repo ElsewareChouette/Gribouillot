@@ -15,17 +15,17 @@ instead of through pull requests to the parent. The approach to keep the tool al
 - **Modernization**: port to Qt6 (Qt5 remains supported), fixes for current systems;
 - **New features**: e.g. the *ellipse from foci* drawing tool;
 - **Distribution**: Linux, Windows and macOS binaries built automatically by GitHub Actions
-  (see [Releases](https://github.com/manuel-masiello/Gribouillot/releases));
+  (see [Releases](https://github.com/ElsewareChouette/Gribouillot/releases));
 - Same GPL3 license as the original project.
 
 Issues and contributions are welcome on this repository.
 
 ## Download
 
-**Latest release: [v2.2.0](https://github.com/manuel-masiello/Gribouillot/releases/tag/v2.2.0)** —
+**Latest release: [v2.2.0](https://github.com/ElsewareChouette/Gribouillot/releases/tag/v2.2.0)** —
 binaries for Linux (AppImage), Windows (zip) and macOS (dmg), built automatically from the
 sources by the [CI workflow](.github/workflows/build.yml). All releases are listed on the
-[Releases page](https://github.com/manuel-masiello/Gribouillot/releases).
+[Releases page](https://github.com/ElsewareChouette/Gribouillot/releases).
 
 The legacy 2.0 binaries built by the upstream project (Qt5, 2018-2020) were removed from the
 repository; they remain available in the
