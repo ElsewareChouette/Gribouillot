@@ -489,6 +489,54 @@ QLineF58 Gribouillot::getSelectedLineF()
 
 
 /**
+ * @brief   Right-click: offer to pick a drawing tool, and mark the spot with a point.
+ * @details Whichever tool is picked gets armed exactly as if its toolbar button had
+ *          been clicked (QMenu triggers the QAction itself). A point is then always
+ *          dropped at the click position, in the current layer, with the current
+ *          color and a fixed size 7 -- for a single point this is the whole job, for
+ *          any other tool it is a convenient anchor for the clicks that follow.
+ */
+void Gribouillot::showDrawContextMenu(QPointF scenePos)
+{
+    QMenu menu(this);
+
+    menu.addAction(ui->actionPoint);
+
+    QMenu *linesMenu = menu.addMenu(tr("Lines"));
+    linesMenu->addAction(ui->actionSegment);
+    linesMenu->addAction(ui->actionLine);
+    linesMenu->addAction(ui->actionHorizontalLine);
+    linesMenu->addAction(ui->actionVerticalLine);
+    linesMenu->addAction(ui->actionParallel);
+    linesMenu->addAction(ui->actionPerpendicular);
+    linesMenu->addAction(ui->actionBisection);
+    linesMenu->addAction(ui->actionAngleLine);
+    linesMenu->addAction(ui->actionTangentToCircle);
+
+    QMenu *circlesMenu = menu.addMenu(tr("Circles && ellipse"));
+    circlesMenu->addAction(ui->actionCircleCenterPoint);
+    circlesMenu->addAction(ui->actionCircleSelectRadius);
+    circlesMenu->addAction(ui->actionCircleRadiusValue);
+    circlesMenu->addAction(ui->actionCircleDiameter);
+    circlesMenu->addAction(ui->actionCircleSelectDiameter);
+    circlesMenu->addAction(ui->actionCircleTriangle);
+    circlesMenu->addAction(ui->actionEllipseFoci);
+
+    QMenu *arcMenu = menu.addMenu(tr("Arc && spiral"));
+    arcMenu->addAction(ui->actionArcFromCircle);
+    arcMenu->addAction(ui->actionArc);
+    arcMenu->addAction(ui->actionSpiral);
+
+    //QMenu::exec() already triggers the chosen QAction before returning.
+    QAction *chosen = menu.exec(QCursor::pos());
+    if (chosen == nullptr)
+        return;
+
+    currentLayer->drawPoint(drawingColor, 7, scenePos, 0);
+}
+
+
+/**
  * @brief   Delete selected items when the 'Del' key is pressed.
  */
 void Gribouillot::keyDeleteFromScene()

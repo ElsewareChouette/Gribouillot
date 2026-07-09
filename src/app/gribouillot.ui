@@ -261,7 +261,7 @@
      <normaloff>:/Resources/Icons/circle-center-point.png</normaloff>:/Resources/Icons/circle-center-point.png</iconset>
    </property>
    <property name="text">
-    <string>circleCenterPoint</string>
+    <string>Circle from center and point</string>
    </property>
    <property name="toolTip">
     <string>Draw a circle given a center and an other point</string>
@@ -276,7 +276,7 @@
      <normaloff>:/Resources/Icons/circle-radius-value.png</normaloff>:/Resources/Icons/circle-radius-value.png</iconset>
    </property>
    <property name="text">
-    <string>circleRadiusValue</string>
+    <string>Circle from radius value</string>
    </property>
    <property name="toolTip">
     <string>Draw a circle given a center and a radius value</string>
@@ -291,7 +291,7 @@
      <normaloff>:/Resources/Icons/circle-2points-diameter.png</normaloff>:/Resources/Icons/circle-2points-diameter.png</iconset>
    </property>
    <property name="text">
-    <string>circleDiameter</string>
+    <string>Circle from 2-point diameter</string>
    </property>
    <property name="toolTip">
     <string>Draw a circle given 2 points as a diameter</string>
@@ -353,7 +353,7 @@
     </iconset>
    </property>
    <property name="text">
-    <string>segment</string>
+    <string>Segment</string>
    </property>
    <property name="toolTip">
     <string>Draw a segment given 2 points</string>
@@ -369,7 +369,7 @@
     </iconset>
    </property>
    <property name="text">
-    <string>parallel</string>
+    <string>Parallel</string>
    </property>
    <property name="toolTip">
     <string>Draw the parallel to a selected line crossing a given point</string>
@@ -385,7 +385,7 @@
     </iconset>
    </property>
    <property name="text">
-    <string>perpendicular</string>
+    <string>Perpendicular</string>
    </property>
    <property name="toolTip">
     <string>Draw the perpendicular to a line crossing a given point</string>
@@ -676,7 +676,7 @@
      <normaloff>:/Resources/Icons/circle-segment.png</normaloff>:/Resources/Icons/circle-segment.png</iconset>
    </property>
    <property name="text">
-    <string>circleSelectRadius</string>
+    <string>Circle from selected radius</string>
    </property>
    <property name="toolTip">
     <string>Draw a circle with the selected segment as radius</string>
@@ -691,7 +691,7 @@
      <normaloff>:/Resources/Icons/circle-diameter.png</normaloff>:/Resources/Icons/circle-diameter.png</iconset>
    </property>
    <property name="text">
-    <string>circleSelectDiameter</string>
+    <string>Circle from selected diameter</string>
    </property>
    <property name="toolTip">
     <string>Draw a circle with the selected segment as diameter</string>
