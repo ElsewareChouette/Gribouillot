@@ -1,6 +1,7 @@
 #ifndef COMMANDS_H
 #define COMMANDS_H
 
+#include <QColor>
 #include <QGraphicsItem>
 #include <QList>
 #include <QUndoCommand>
@@ -37,6 +38,31 @@ private:
     QList<QGraphicsItem *> items;
     QList<int> indices;
     bool detached = false;
+};
+
+struct ItemStyle
+{
+    QColor color;
+    int width;
+};
+
+//Read/write an item's (color, width) regardless of its concrete type (pen or brush).
+ItemStyle styleOf(QGraphicsItem *item);
+void applyStyle(QGraphicsItem *item, const ItemStyle &style);
+
+class ChangeStyleCommand : public QUndoCommand
+{
+public:
+    ChangeStyleCommand(const QList<QGraphicsItem *> &items, const QList<ItemStyle> &newStyles,
+                        QUndoCommand *parent = nullptr);
+
+    void undo() override;
+    void redo() override;
+
+private:
+    QList<QGraphicsItem *> items;
+    QList<ItemStyle> oldStyles;
+    QList<ItemStyle> newStyles;
 };
 
 #endif // COMMANDS_H

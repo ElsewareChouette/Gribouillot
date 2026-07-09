@@ -576,39 +576,15 @@ void Gribouillot::keyTFromScene()
         {
             int width = dialog.getThicknessValue();//Between 1 and 30
 
-            foreach(QGraphicsItem* item, currentLayer->selectedItems())
+            QList<QGraphicsItem*> items = currentLayer->selectedItems();
+            QList<ItemStyle> newStyles;
+            for (QGraphicsItem* item : items)
             {
-                if(item->type() == POINT_W )
-                {
-                 Item_point* p = qgraphicsitem_cast<Item_point*>(item);
-                 p->newBrush(p->brush().color(), width);
-                }
-                else if (item->type() == LINE || item->type() == SEGMENT)
-                {
-                 Item_segment* l = dynamic_cast<Item_segment*>(item);
-                 l->newPen(l->pen().color(), width);
-                }
-                else if (item->type() == CIRCLE)
-                {
-                 Item_circle* c = qgraphicsitem_cast<Item_circle*>(item);
-                 c->newPen(c->pen().color(), width);
-                }
-                else if (item->type() == ELLIPSE)
-                {
-                 Item_ellipse* e = qgraphicsitem_cast<Item_ellipse*>(item);
-                 e->newPen(e->pen().color(), width);
-                }
-                else if (item->type() == ARC)
-                {
-                 Item_arc* a = qgraphicsitem_cast<Item_arc*>(item);
-                 a->newPen(a->pen().color(), width);
-                }
-                else if (item->type() == SPIRAL)
-                {
-                 Item_spiral* s = qgraphicsitem_cast<Item_spiral*>(item);
-                 s->newPen(s->pen().color(), width);
-                }
+                ItemStyle style = styleOf(item);
+                style.width = width;
+                newStyles.append(style);
             }
+            undoStack->push(new ChangeStyleCommand(items, newStyles));
         }
     }
     else
@@ -997,41 +973,15 @@ void Gribouillot::on_actionChooseColor_triggered()
                                                     QColorDialog::DontUseNativeDialog);
         if (color.isValid())
         {
-            foreach(QGraphicsItem* item, currentLayer->selectedItems())
+            QList<QGraphicsItem*> items = currentLayer->selectedItems();
+            QList<ItemStyle> newStyles;
+            for (QGraphicsItem* item : items)
             {
-                if(item->type() == POINT_W )
-                {
-                    Item_point* p = qgraphicsitem_cast<Item_point*>(item);
-                    p->newBrush(color, p->rect().width());
-                }
-                else if (item->type() == LINE || item->type() == SEGMENT)
-                {
-                    Item_segment* s = dynamic_cast<Item_segment*>(item);
-                    s->newPen(color, s->pen().width());
-                }
-                else if (item->type() == CIRCLE)
-                {
-                    Item_circle* c = qgraphicsitem_cast<Item_circle*>(item);
-                    c->newPen(color, c->pen().width());
-                }
-                else if (item->type() == ELLIPSE)
-                {
-                    Item_ellipse* e = qgraphicsitem_cast<Item_ellipse*>(item);
-                    e->newPen(color, e->pen().width());
-                }
-                else if (item->type() == ARC)
-                {
-                    Item_arc* a = qgraphicsitem_cast<Item_arc*>(item);
-                    a->newPen(color, a->pen().width());
-                }
-                else if (item->type() == SPIRAL)
-                {
-                    Item_spiral* s = qgraphicsitem_cast<Item_spiral*>(item);
-                    s->newPen(color, s->pen().width());
-
-                }
-
-             }
+                ItemStyle style = styleOf(item);
+                style.color = color;
+                newStyles.append(style);
+            }
+            undoStack->push(new ChangeStyleCommand(items, newStyles));
         }
     }
     //else change the color for future drawings.
