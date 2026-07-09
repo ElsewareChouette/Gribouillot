@@ -106,6 +106,17 @@ void GribouillotScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
         //qDebug() << "adjustClick2Point " << scenePos;
     }
 
+    /*
+     * Right-click is reserved for the drawing-tools context menu (see
+     * contextMenuEvent) and must not also trigger whatever drawing tool is
+     * currently armed.
+     */
+    if (event->button() == Qt::RightButton)
+    {
+        QGraphicsScene::mousePressEvent(event);
+        return;
+    }
+
     emit newMouseClickPreSelect(scenePos);
 
     /*
@@ -125,6 +136,16 @@ void GribouillotScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
 
     emit newMouseClickPostSelect(scenePos);
 
+}
+
+
+/**
+ * @brief   Right-click: let the MainWindow show a menu to pick a drawing tool.
+ */
+void GribouillotScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
+{
+    emit contextMenuRequested(event->scenePos());
+    event->accept();
 }
 
 

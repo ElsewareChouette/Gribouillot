@@ -38,11 +38,13 @@ signals:
     void keyCPressed();
     void keyTPressed();
     void keyEscPressed();
+    void contextMenuRequested(QPointF scenePos);
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) Q_DECL_OVERRIDE;
     void mouseMoveEvent(QGraphicsSceneMouseEvent *event) Q_DECL_OVERRIDE;
     void keyPressEvent(QKeyEvent *e) Q_DECL_OVERRIDE;
+    void contextMenuEvent(QGraphicsSceneContextMenuEvent *event) Q_DECL_OVERRIDE;
 
 private:
     QVector<QPen> selectPens;

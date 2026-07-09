@@ -85,6 +85,7 @@ Gribouillot::Gribouillot(QWidget *parent) :
     connect (scene, &GribouillotScene::selectionChanged, this, &Gribouillot::sceneSelectionChanged);
     connect (scene, &GribouillotScene::newMouseClickPreSelect, this, &Gribouillot::newSceneClickPreSelect);
     connect (scene, &GribouillotScene::newMouseClickPostSelect, this, &Gribouillot::newSceneClickPostSelect);
+    connect (scene, &GribouillotScene::contextMenuRequested, this, &Gribouillot::showDrawContextMenu);
     connect (scene, &GribouillotScene::newMouseMove, this, &Gribouillot::newMoveOnScene);
     connect (scene, &GribouillotScene::keyDeletePressed, this, &Gribouillot::keyDeleteFromScene);
     connect (scene, &GribouillotScene::keySpacePressed, this, &Gribouillot::keySpaceFromScene);
