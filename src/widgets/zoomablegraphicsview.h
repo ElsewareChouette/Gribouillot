@@ -28,6 +28,7 @@ public:
 
     qreal getZoom();
     void setMapRect(QRectF rect);
+    void zoomToFit(QRectF rect);
 
 public slots:
     void systemScaleChanged(qreal systemScale, QString unit);

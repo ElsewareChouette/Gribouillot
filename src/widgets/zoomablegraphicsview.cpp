@@ -25,8 +25,8 @@ ZoomableGraphicsView::ZoomableGraphicsView(QWidget * parent) : QGraphicsView(par
     scaleBar = new ScaleBar(this);
     currentZoom = 1;
 
-    //White margin around the background map (see setMapRect)
-    setBackgroundBrush(Qt::white);
+    //Black margin around the background map (see setMapRect)
+    setBackgroundBrush(Qt::black);
 
     //see also the Designer for other UI properties of the GraphicsView.
 
@@ -78,6 +78,34 @@ void ZoomableGraphicsView::updateSceneRect()
     }
 
 }
+
+/**
+ * @brief   Zoom out (or in) so rect fits entirely in the viewport, and center on it.
+ * @details Used when a background map is loaded, so it opens fully visible instead of
+ *          at the zoom level (and scroll position) left over from a previous map.
+ */
+void ZoomableGraphicsView::zoomToFit(QRectF rect)
+{
+    if (rect.isEmpty() || viewport()->width() == 0 || viewport()->height() == 0)
+        return;
+
+    qreal fitZoom = qMin(viewport()->width() / rect.width(),
+                          viewport()->height() / rect.height());
+
+    qreal zoomFactor = fitZoom / currentZoom;
+
+    resetTransform();
+    scale(fitZoom, fitZoom);
+    currentZoom = fitZoom;
+
+    centerOn(rect.center());
+
+    //The scrolling margin around the map is half a viewport wide
+    updateSceneRect();
+
+    scaleBar->zoomChanged(zoomFactor, currentZoom);
+}
+
 
 /********************* SLOTS *********************/
 /**

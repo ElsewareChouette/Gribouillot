@@ -673,6 +673,9 @@ void Gribouillot::loadBackgroundMap(QString path)
         QRectF viewBoundingRect = backgroundMap->boundingRect();
         ui->zGraphicsView->setMapRect(viewBoundingRect);
 
+        //Open on the whole map, fully visible, rather than at the previous zoom/scroll position
+        ui->zGraphicsView->zoomToFit(viewBoundingRect);
+
         /*
          * Being the first item added to the scene, backgroundMap has the lowest
          * Z value and is always in the background.
