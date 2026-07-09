@@ -9,8 +9,10 @@ This repository is an **actively maintained fork** of
 [Fr3nchK1ss/Gribouillot](https://github.com/Fr3nchK1ss/Gribouillot), the original project by
 Ludovic A., whose last activity dates back to **October 2020 (version 2.0)**.
 
-Since the upstream project does not appear to be maintained anymore, development continues here
-instead of through pull requests to the parent. The approach to keep the tool alive:
+It's maintained by **Elseware**, a *chouetteur* (Golden Owl hunter) who uses Gribouillot and
+wanted to keep it alive and keep improving it. Since the upstream project does not appear to be
+maintained anymore, development continues here instead of through pull requests to the parent.
+The approach to keep the tool alive:
 
 - **Modernization**: port to Qt6 (Qt5 remains supported), fixes for current systems;
 - **New features**: e.g. the *ellipse from foci* drawing tool;
@@ -18,7 +20,7 @@ instead of through pull requests to the parent. The approach to keep the tool al
   (see [Releases](https://github.com/ElsewareChouette/Gribouillot/releases));
 - Same GPL3 license as the original project.
 
-Issues and contributions are welcome on this repository.
+Any remark, bug report or suggestion is welcome — feel free to open an issue on this repository.
 
 ## Download
 

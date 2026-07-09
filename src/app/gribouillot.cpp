@@ -1078,11 +1078,12 @@ void Gribouillot::on_actionAbout_Grib_triggered()
     "<p><br/>This software was created with the first intent to help people in search of the "
     "Golden Owl, a famous French treasure.<br/>"
     "Original author : <b>Ludovic A.</b> (versions up to 2.0)</p>"
-    "<p>This version is developed and maintained at "
-    "<a href=\"https://github.com/manuel-masiello/Gribouillot\">manuel-masiello/Gribouillot</a>, "
+    "<p>This version is developed and maintained by <b>Elseware</b>, a chouetteur (Golden Owl "
+    "hunter), at "
+    "<a href=\"https://github.com/ElsewareChouette/Gribouillot\">ElsewareChouette/Gribouillot</a>, "
     "an active fork of the original project "
     "<a href=\"https://github.com/Fr3nchK1ss/Gribouillot\">Fr3nchK1ss/Gribouillot</a>, "
-    "unmaintained since 2020.</p>"));
+    "unmaintained since 2020. Any remark or suggestion is welcome!</p>"));
 }
 
 
