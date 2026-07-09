@@ -495,9 +495,17 @@ QLineF58 Gribouillot::getSelectedLineF()
  *          dropped at the click position, in the current layer, with the current
  *          color and a fixed size 7 -- for a single point this is the whole job, for
  *          any other tool it is a convenient anchor for the clicks that follow.
+ *          Right-clicking on an already-selected item instead opens the same
+ *          color/thickness dialog as the 'T' shortcut.
  */
-void Gribouillot::showDrawContextMenu(QPointF scenePos)
+void Gribouillot::showDrawContextMenu(QPointF scenePos, bool onSelectedItem)
 {
+    if (onSelectedItem)
+    {
+        keyTFromScene();
+        return;
+    }
+
     QMenu menu(this);
 
     menu.addAction(ui->actionPoint);
@@ -570,13 +578,13 @@ void Gribouillot::keyTFromScene()
 {
     if(!currentLayer->selectedItems().isEmpty())
     {
-        Dlg_penThickness dialog("Change the width of selected items.", drawingWidth);
+        QList<QGraphicsItem*> items = currentLayer->selectedItems();
+        Dlg_penThickness dialog("Change the width of selected items.", styleOf(items.first()).width);
 
         if (dialog.exec() == QDialog::Accepted)
         {
             int width = dialog.getThicknessValue();//Between 1 and 30
 
-            QList<QGraphicsItem*> items = currentLayer->selectedItems();
             QList<ItemStyle> newStyles;
             for (QGraphicsItem* item : items)
             {

@@ -164,7 +164,7 @@ private slots:
     void newMoveOnScene(QPointF position);
     void newSceneClickPreSelect(QPointF position);
     void newSceneClickPostSelect(QPointF position);
-    void showDrawContextMenu(QPointF scenePos);
+    void showDrawContextMenu(QPointF scenePos, bool onSelectedItem);
 
     void keyDeleteFromScene();
     void keySpaceFromScene();

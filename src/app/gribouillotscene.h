@@ -38,7 +38,7 @@ signals:
     void keyCPressed();
     void keyTPressed();
     void keyEscPressed();
-    void contextMenuRequested(QPointF scenePos);
+    void contextMenuRequested(QPointF scenePos, bool onSelectedItem);
 
 protected:
     void mousePressEvent(QGraphicsSceneMouseEvent *event) Q_DECL_OVERRIDE;
@@ -48,6 +48,7 @@ protected:
 
 private:
     QVector<QPen> selectPens;
+    bool rightClickOnSelectedItem = false;
 
 };
 

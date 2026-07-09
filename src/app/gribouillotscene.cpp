@@ -109,11 +109,15 @@ void GribouillotScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
     /*
      * Right-click is reserved for the drawing-tools context menu (see
      * contextMenuEvent) and must not also trigger whatever drawing tool is
-     * currently armed.
+     * currently armed. The default QGraphicsScene handling is skipped
+     * entirely (not just the drawing signals) because it would otherwise
+     * clear the current selection before contextMenuEvent gets a chance to
+     * check it.
      */
     if (event->button() == Qt::RightButton)
     {
-        QGraphicsScene::mousePressEvent(event);
+        rightClickOnSelectedItem = (item != nullptr && item->isSelected());
+        event->accept();
         return;
     }
 
@@ -144,7 +148,7 @@ void GribouillotScene::mousePressEvent(QGraphicsSceneMouseEvent *event)
  */
 void GribouillotScene::contextMenuEvent(QGraphicsSceneContextMenuEvent *event)
 {
-    emit contextMenuRequested(event->scenePos());
+    emit contextMenuRequested(event->scenePos(), rightClickOnSelectedItem);
     event->accept();
 }
 
