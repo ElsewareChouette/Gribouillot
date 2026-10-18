@@ -34,6 +34,13 @@ repository; they remain available in the
 [upstream project](https://github.com/Fr3nchK1ss/Gribouillot/tree/master/bin) and in this
 repository's git history.
 
+## Web version (alpha)
+
+A TypeScript rewrite running in the browser lives in [`web/`](web/README.md): nothing to
+install, maps and drawings stay in the browser (nothing is uploaded). It opens desktop project
+folders (or a `.zip` of them) and exports back to the same `.grib` + `.xml` layout. It is
+deployed to GitHub Pages by the [web workflow](.github/workflows/web.yml).
+
 ## Build Instructions
 
 ### Linux (Ubuntu/Debian)

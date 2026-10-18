@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Gribouillot : constructions géométriques sur une carte, par calques. Créé pour la chasse à la Chouette d'Or." />
+    <title>Gribouillot</title>
+  </head>
+  <body class="no-project">
+    <header id="topbar">
+      <div class="brand">Gribouillot</div>
+      <nav id="menus"></nav>
+      <div id="toolbar"></div>
+    </header>
+    <main>
+      <div id="stage">
+        <canvas id="canvas" tabindex="0" aria-label="Carte et constructions"></canvas>
+        <div id="scalebar"></div>
+        <canvas id="minimap" title="Mini-carte : cliquer ou glisser pour se déplacer"></canvas>
+      </div>
+      <aside id="sidebar"></aside>
+    </main>
+    <footer id="statusbar">
+      <span id="status" aria-live="polite"></span>
+      <span id="coords"></span>
+    </footer>
+    <div id="start"></div>
+    <div id="drop-overlay">Déposez ici une carte, un dossier de projet ou un .zip</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
