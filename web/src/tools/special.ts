@@ -21,7 +21,7 @@ export class PointTool extends Tool {
   }
 
   click(app: App, e: ToolEvent): void {
-    void app.addPoint(e.p);
+    void app.addPoint(e.p, e.snap);
   }
 }
 

@@ -313,7 +313,7 @@ const round = (v) => (typeof v === 'number' ? Math.round(v * 1e4) / 1e4 + 0 : v)
 const clean = (v) => {
   if (Array.isArray(v)) return v.map(clean);
   if (v && typeof v === 'object') {
-    return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'id').sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, x]) => [k, clean(x)]));
+    return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'id' && k !== 'link').sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, x]) => [k, clean(x)]));
   }
   return round(v);
 };
@@ -365,6 +365,81 @@ await page.reload();
 await page.waitForFunction(() => window.gribouillot.project);
 const kept = await A(() => window.gribouillot.project.anchors?.map((a) => a.name).join(''));
 if (kept !== 'ABCD') errors.push(`gps: anchors after reload: ${kept}`);
+
+// Snapping: 2 lines crossing at (281.82 ; 190.91), a segment of middle (600 ; 530).
+await A(() => {
+  const a = window.gribouillot;
+  a.addLayer();
+  a.setZoom(1);
+  a.cam.panX = 0;
+  a.cam.panY = 0;
+  a.requestRender();
+});
+await page.locator('#canvas').focus();
+await key('d');
+await click(100, 100);
+await click(400, 250);
+await click(100, 300);
+await click(400, 120);
+await key('g');
+await click(500, 500);
+await click(700, 560);
+await A(() => {
+  const a = window.gribouillot;
+  a.setTool('select');
+  a.setSelection(a.currentLayer.items.filter((i) => i.kind === 'line').map((i) => i.id));
+});
+await key('i');
+const crossing = await A(() => window.gribouillot.currentLayer.items.filter((i) => i.kind === 'point').map((i) => i.p));
+const exact = { x: 100 + 2000 / 11, y: 100 + 1000 / 11 };
+const near = (p, q) => p && Math.hypot(p.x - q.x, p.y - q.y) < 1e-6;
+if (crossing.length !== 1 || !near(crossing[0], exact)) errors.push(`intersections: [I] gave ${JSON.stringify(crossing)}`);
+await key('Control+z');
+await key('p');
+await move(284, 193);
+const label = await status();
+await click(284, 193);
+await click(603, 528);
+const snapped = await A(() => window.gribouillot.currentLayer.items.filter((i) => i.kind === 'point').map((i) => i.p));
+if (snapped.length !== 2 || !near(snapped[0], exact) || !near(snapped[1], { x: 600, y: 530 })) {
+  errors.push(`snap: points at ${JSON.stringify(snapped)} (status « ${label} »)`);
+}
+
+// Linked constructions: A, B, the line AB, the circle of center A through B,
+// and a point on their other crossing; then B is dragged.
+await A(() => window.gribouillot.addLayer());
+await page.locator('#canvas').focus();
+await key('p');
+await click(300, 700);
+await click(450, 700);
+await key('d');
+await click(300, 700);
+await click(450, 700);
+await key('o');
+await click(300, 700);
+await click(450, 700);
+await key('p');
+await click(152, 702);
+await key('j');
+await move(450, 700);
+await page.mouse.down();
+await page.mouse.move(box.x + 450, box.y + 850, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(50);
+const linked = await A(() => {
+  const items = window.gribouillot.currentLayer.items;
+  const circle = items.find((i) => i.kind === 'circle');
+  const pts = items.filter((i) => i.kind === 'point').map((i) => i.p);
+  const line = items.find((i) => i.kind === 'line');
+  return { r: circle.r, pts, slope: (line.p2.y - line.p1.y) / (line.p2.x - line.p1.x) };
+});
+const r2 = Math.hypot(150, 150);
+if (Math.abs(linked.r - r2) > 1e-6 || Math.abs(linked.slope - 1) > 1e-6 || !near(linked.pts[2], { x: 300 - 150, y: 700 - 150 })) {
+  errors.push(`links: after dragging B ${JSON.stringify(linked)}`);
+}
+await key('Control+z');
+const undone2 = await A(() => window.gribouillot.currentLayer.items.find((i) => i.kind === 'circle').r);
+if (Math.abs(undone2 - 150) > 1e-6) errors.push(`links: undo gave a radius of ${undone2}`);
 await browser.close();
 
 if (errors.length) {

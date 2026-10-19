@@ -52,8 +52,78 @@ async function get(params: Record<string, string>): Promise<Town[]> {
 }
 
 /** Communes whose name looks like the query, the most populated first. */
-export function searchTowns(name: string, limit = 8): Promise<Town[]> {
-  return get({ nom: name, boost: 'population', limit: String(limit) });
+export function searchTowns(name: string, limit = 8, dept?: string): Promise<Town[]> {
+  return get({ nom: name, boost: 'population', limit: String(limit), ...(dept ? { codeDepartement: dept } : {}) });
+}
+
+/* ===================================================== lists of towns */
+
+/** A line of a list of towns: « Clisson », « Clisson ; 3 », « Saint-Pierre (44) 2 ». */
+export interface TownRequest {
+  name: string;
+  dept?: string;
+  weight: number;
+}
+
+/** Read a list of towns, one per line, with an optional department and weight. */
+export function parseTownList(text: string): TownRequest[] {
+  const out: TownRequest[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    let line = raw.trim();
+    if (!line) continue;
+    let weight = 0;
+    // The weight: the last number, after a separator or a space.
+    const w = /(?:^|[\s;,\t])(-?\d+)\s*$/.exec(line);
+    if (w && line.slice(0, w.index).trim()) {
+      weight = parseInt(w[1], 10);
+      line = line.slice(0, w.index);
+    }
+    line = line.replace(/[\s;,\t]+$/, '');
+    let dept: string | undefined;
+    const d = /\(\s*(\d[\dAB]?\d?)\s*\)/i.exec(line);
+    if (d) {
+      dept = d[1].toUpperCase().padStart(2, '0');
+      line = (line.slice(0, d.index) + line.slice(d.index + d[0].length)).trim();
+    }
+    if (line) out.push({ name: line, dept, weight });
+  }
+  return out;
+}
+
+/** A name in a comparable form: no case, accents, hyphens; « St » is « Saint ». */
+export function townKey(name: string): string {
+  return name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[-'’\s]+/g, ' ')
+    .replace(/\bste\b/g, 'sainte').replace(/\bst\b/g, 'saint')
+    .trim();
+}
+
+export interface TownMatch {
+  request: TownRequest;
+  /** Communes of exactly this name (the most populated first), or the closest names when none. */
+  candidates: Town[];
+  exact: boolean;
+}
+
+/** Find the communes of each requested name (a few requests at a time). */
+export async function matchTowns(reqs: TownRequest[], onProgress?: (done: number) => void): Promise<TownMatch[]> {
+  const out: TownMatch[] = new Array(reqs.length);
+  let next = 0, done = 0;
+  const worker = async () => {
+    while (next < reqs.length) {
+      const i = next++;
+      const r = reqs[i];
+      const found = await searchTowns(r.name, 20, r.dept);
+      const key = townKey(r.name);
+      const exact = found.filter((t) => townKey(t.name) === key);
+      out[i] = { request: r, candidates: exact.length ? exact : found.slice(0, 5), exact: exact.length > 0 };
+      onProgress?.(++done);
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return out;
 }
 
 /** The commune at a position, if it is in France. */

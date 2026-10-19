@@ -8,7 +8,8 @@
 import type { App } from '../app';
 import { isItem, isPt, type Draft, type Input, type Recipe, type Shape, type Step } from '../constructions';
 import { samePt, seg, type Pt } from '../geom';
-import type { Item } from '../model';
+import { clickSource, itemSource } from '../links';
+import type { Item, Source, StrokeItem } from '../model';
 import type { Renderer, StrokeStyle } from '../render';
 import { ArcSpanTracker } from '../shapes';
 import { alertDialog, promptNumber } from '../ui/dialogs';
@@ -19,6 +20,8 @@ import type { ToolId } from './index';
 export class ConstructionTool extends Tool {
   readonly id: ToolId;
   private inputs: Input[] = [];
+  /** Where each input comes from, so that the figure can follow it (links.ts). */
+  private sources: Source[] = [];
   private tracker = new ArcSpanTracker();
   /** Last length typed, proposed again next time (in the unit of the map). */
   private lastLength: number | null = null;
@@ -45,10 +48,12 @@ export class ConstructionTool extends Tool {
 
   start(app: App): void {
     this.inputs = [];
+    this.sources = [];
     this.round++;
     const pre = this.preselection(app);
     if (pre) {
       this.inputs = pre;
+      this.sources = app.selectedItems().map((h) => itemSource(h.item as StrokeItem));
       if (!this.onItem) app.setSelection([]);
       this.next(app);
       return;
@@ -86,7 +91,9 @@ export class ConstructionTool extends Tool {
   private finish(app: App): void {
     const r = this.recipe;
     const res = r.build(this.inputs);
+    const sources = this.sources;
     this.inputs = this.inputs.slice(0, r.keep ?? 0);
+    this.sources = this.sources.slice(0, r.keep ?? 0);
     this.round++;
     if (this.onItem) app.setSelection(this.inputs.filter(isItem).map((i) => i.id));
     app.status(this.tip() ?? r.again ?? '');
@@ -97,7 +104,7 @@ export class ConstructionTool extends Tool {
     }
     // Layers stay independent: a replaced item is only removed from the current layer.
     const remove = (res.remove ?? []).filter((i) => app.inCurrentLayer(i.id)).map((i) => i.id);
-    app.addShapes(res.shapes, r.label, { center: res.center, remove });
+    app.addShapes(res.shapes, r.label, { center: res.center, remove, link: { recipe: r.id, sources } });
   }
 
   click(app: App, e: ToolEvent): void {
@@ -108,6 +115,7 @@ export class ConstructionTool extends Tool {
       const ref = this.inputs[0] as Item | undefined;
       if (hit && hit.item.id !== ref?.id) {
         this.inputs = [hit.item];
+        this.sources = [itemSource(hit.item as StrokeItem)];
         this.round++;
         this.next(app);
         return;
@@ -123,6 +131,7 @@ export class ConstructionTool extends Tool {
         return;
       }
       this.inputs[0] = current.item;
+      this.sources[0] = itemSource(current.item as StrokeItem);
     }
     const step = this.step;
     if (step?.take === 'point') {
@@ -133,11 +142,14 @@ export class ConstructionTool extends Tool {
         return;
       }
       this.inputs.push(p);
+      this.sources.push(step.raw ? { k: 'pt', p: e.raw } : clickSource(e.raw, e.snap, (id) => app.findItem(id)?.item));
       this.next(app);
     } else if (step?.take === 'angle') {
       const side = step.side(this.inputs);
       if (samePt(e.raw, side.p1)) return;
-      this.inputs.push(this.tracker.update(side, seg(side.p1, e.raw)));
+      const span = this.tracker.update(side, seg(side.p1, e.raw));
+      this.inputs.push(span);
+      this.sources.push({ k: 'num', v: span });
       this.next(app);
     }
   }
@@ -164,6 +176,7 @@ export class ConstructionTool extends Tool {
       const a = await promptNumber(title, label, initial(this.tracker.span), { unit: '°', min: -360, max: 360 });
       if (a === null || round !== this.round) return;
       this.inputs.push(a);
+      this.sources.push({ k: 'num', v: a });
       this.next(app);
     })();
     return true;
@@ -183,6 +196,7 @@ export class ConstructionTool extends Tool {
     }
     if (!step.initial) this.lastLength = v;
     this.inputs.push(k ? v / k : v);
+    this.sources.push({ k: 'num', v: k ? v / k : v });
     this.next(app);
   }
 

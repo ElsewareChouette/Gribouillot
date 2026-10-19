@@ -8,6 +8,7 @@
  */
 
 import { unzipSync, zipSync, type Zippable } from 'fflate';
+import { uniqueIds } from './links';
 import { baseName, parseGrib, parseLayerXml, writeGrib, writeLayerXml } from './legacy';
 import { emptyProject, newId, type Project } from './model';
 
@@ -121,6 +122,8 @@ export async function importProject(input: NamedBlob[]): Promise<ImportResult | 
       else missingPics.add(baseName(p));
     }
   }
+  // Ids saved by the web version: kept, unless the same file was given twice.
+  project.layers = uniqueIds(project.layers, new Set());
   if (missingLayers.length) warnings.push(`Calque(s) introuvable(s) : ${missingLayers.join(', ')}`);
   if (missingPics.size) warnings.push(`Image(s) introuvable(s) : ${[...missingPics].join(', ')}`);
   return { project, files: projectFiles, warnings, missingMap };

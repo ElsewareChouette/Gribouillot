@@ -183,6 +183,7 @@ export class Renderer {
       case 'point':
         this.point(it.p, it.color, it.width, a);
         if (opts.showWeight && it.weight !== 0) this.text(it.p, String(it.weight), { color: it.color, size: 20, bold: true, dx: 7, dy: 16 });
+        if (it.label) this.text(it.p, it.label, { color: it.color, size: 13, bold: true, dx: 7, dy: -6 });
         break;
       default:
         this.outline(it, s);

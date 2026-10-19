@@ -248,3 +248,14 @@ ul.anchors .err.worst { color: #d00000; font-weight: 600; }
 ul.place-results { list-style: none; margin: 6px 0 0; padding: 0; max-height: 200px; overflow-y: auto; }
 ul.place-results li { padding: 2px 0; }
 ul.place-results .link { text-align: left; }
+
+/* Towns by name */
+.towns-btn { margin-top: 8px; }
+.towns-dlg textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: inherit; }
+.towns-dlg .row { margin: 8px 0; }
+table.towns { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.towns th { text-align: left; color: var(--muted); font-weight: 600; padding: 2px 4px; }
+table.towns td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-align: top; }
+table.towns select { max-width: 320px; }
+table.towns input[type=number] { width: 5em; }
+table.towns .hint { margin: 2px 0 0; }

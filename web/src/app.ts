@@ -12,9 +12,11 @@ import { Camera } from './camera';
 import type { Shape } from './constructions';
 import { describeSelection } from './describe';
 import * as edits from './edits';
-import { fitGeoref, formatLatLon, MODEL_LABELS, type Anchor, type Georef } from './geo';
-import { pt, type Pt, type Rect } from './geom';
+import { fitGeoref, formatLatLon, MODEL_LABELS, type Anchor, type Georef, type LatLon } from './geo';
+import { dist, pt, type Pt, type Rect } from './geom';
 import { History } from './history';
+import { clickSource, linksFor, propagate, uniqueIds } from './links';
+import { centerOf, crossings, remarkablePoints, SNAP_LABELS, type SnapPoint } from './intersections';
 import type { Picture } from './images';
 import { Input } from './input';
 import { importLayers } from './io';
@@ -30,6 +32,7 @@ import {
   type Layer,
   type PixmapItem,
   type Project,
+  type Source,
 } from './model';
 import { HIGHLIGHT, Renderer } from './render';
 import { Session } from './session';
@@ -39,6 +42,7 @@ import { toolDef, type Tool, type ToolId } from './tools';
 import { alertDialog, confirmDialog, openDialog, promptNumber, promptText, styleDialog } from './ui/dialogs';
 import { fmt, h, pickFiles } from './ui/dom';
 import { placeDialog } from './ui/place';
+import { townsDialog } from './ui/towns';
 
 export interface Hit {
   item: Item;
@@ -50,13 +54,17 @@ export interface Options {
   weights: boolean;
   minimap: boolean;
   gray: boolean;
+  /** Clicks snap on intersections, middles, ends and centers (and always on points). */
+  snapFigures: boolean;
   spiral: { oneItem: boolean; showBase: boolean; centersOnly: boolean };
 }
 
 const OPTIONS_KEY = 'gribouillot.options';
+/** Distance in screen pixels within which a click snaps on a remarkable point. */
+const SNAP_PX = 10;
 
 function loadOptions(): Options {
-  const def: Options = { drawCenter: false, weights: false, minimap: true, gray: false, spiral: { oneItem: true, showBase: false, centersOnly: true } };
+  const def: Options = { drawCenter: false, weights: false, minimap: true, gray: false, snapFigures: true, spiral: { oneItem: true, showBase: false, centersOnly: true } };
   try {
     const s = JSON.parse(localStorage.getItem(OPTIONS_KEY) ?? '{}');
     return { ...def, ...s, spiral: { ...def.spiral, ...(s.spiral ?? {}) }, gray: false };
@@ -181,17 +189,9 @@ export class App {
     this.tool.overlay(r, this);
     // Snap indicator on the point under the mouse.
     const mouse = this.input.mouseScreen;
-    if (mouse && this.tool.draws) {
-      const s = this.snapTarget(mouse);
-      if (s) {
-        const c = this.cam.toScreen(s);
-        this.ctx.beginPath();
-        this.ctx.arc(c.x, c.y, 9, 0, Math.PI * 2);
-        this.ctx.lineWidth = 2;
-        this.ctx.setLineDash([]);
-        this.ctx.strokeStyle = HIGHLIGHT;
-        this.ctx.stroke();
-      }
+    if (mouse && this.snaps()) {
+      const s = this.snap(mouse);
+      if (s) this.drawSnap(s);
     }
     const band = this.input.rubberBand();
     if (band) r.rubberBand(band);
@@ -229,14 +229,87 @@ export class App {
     return best;
   }
 
-  /** Center of the visible point under the given screen position, if any. */
-  snapTarget(screen: Pt): Pt | null {
-    const hit = this.pick(screen, ['point']);
-    return hit && hit.item.kind === 'point' ? hit.item.p : null;
+  /** The current tool places points: its clicks snap. */
+  snaps(): boolean {
+    return this.tool.draws || ['measure', 'protractor', 'calibrate', 'georef'].includes(this.toolId);
   }
 
+  /**
+   * Where a click at this screen position lands: on the visible point under
+   * the mouse, else on the closest remarkable point of the figure nearby
+   * (intersection, middle or end of a segment, center), if any.
+   */
+  snap(screen: Pt): SnapPoint | null {
+    const hit = this.pick(screen, ['point']);
+    if (hit && hit.item.kind === 'point') return { p: hit.item.p, kind: 'point', ids: [hit.item.id] };
+    if (!this.options.snapFigures || !this.project) return null;
+    const scene = this.cam.toScene(screen);
+    const zoom = this.cam.zoom;
+    const near: Item[] = [];
+    const found: SnapPoint[] = [];
+    for (const layer of this.project.layers) {
+      if (!layer.visible) continue;
+      for (const it of layer.items) {
+        if (!isStroke(it) || it.kind === 'point') continue;
+        if (itemDistance(it, scene, zoom, this.sizeOf) <= SNAP_PX + it.width / 2) near.push(it);
+        const c = centerOf(it);
+        if (c) found.push({ p: c, kind: 'center', ids: [it.id] });
+      }
+    }
+    found.push(...remarkablePoints(near));
+    let best: SnapPoint | null = null, bestD = SNAP_PX;
+    for (const f of found) {
+      // Intersections win a close call: they are what one aims at.
+      const d = dist(f.p, scene) * zoom - (f.kind === 'intersection' ? 3 : 0);
+      if (d < bestD) [best, bestD] = [f, d];
+    }
+    return best;
+  }
+
+  snapTarget(screen: Pt): Pt | null {
+    return this.snap(screen)?.p ?? null;
+  }
+
+  /** A visible point is under the mouse (not just a remarkable point of the figure). */
   isOnPoint(screen: Pt): boolean {
-    return this.snapTarget(screen) !== null;
+    return this.pick(screen, ['point']) !== null;
+  }
+
+  private drawSnap(s: SnapPoint): void {
+    const c = this.cam.toScreen(s.p);
+    const x = this.ctx;
+    x.beginPath();
+    switch (s.kind) {
+      case 'point':
+        x.arc(c.x, c.y, 9, 0, Math.PI * 2);
+        break;
+      case 'intersection':
+        x.moveTo(c.x - 7, c.y - 7);
+        x.lineTo(c.x + 7, c.y + 7);
+        x.moveTo(c.x - 7, c.y + 7);
+        x.lineTo(c.x + 7, c.y - 7);
+        break;
+      case 'midpoint':
+        x.moveTo(c.x, c.y - 8);
+        x.lineTo(c.x + 7, c.y + 5);
+        x.lineTo(c.x - 7, c.y + 5);
+        x.closePath();
+        break;
+      case 'end':
+        x.rect(c.x - 6, c.y - 6, 12, 12);
+        break;
+      case 'center':
+        x.moveTo(c.x - 8, c.y);
+        x.lineTo(c.x + 8, c.y);
+        x.moveTo(c.x, c.y - 8);
+        x.lineTo(c.x, c.y + 8);
+        break;
+    }
+    x.lineWidth = 2.5;
+    x.setLineDash([]);
+    x.strokeStyle = HIGHLIGHT;
+    x.stroke();
+    if (s.kind !== 'point') this.renderer.text(s.p, SNAP_LABELS[s.kind], { color: HIGHLIGHT, size: 12, bold: true, dx: 11, dy: 16 });
   }
 
   findItem(id: string): Hit | null {
@@ -310,6 +383,21 @@ export class App {
     this.requestRender();
   }
 
+  /** Constructions which could not follow the last move of a point. */
+  private stale = 0;
+
+  /** The layers with a point of the current layer moved, and what is built on it following. */
+  movedPoint(layers: Layer[], id: string, p: Pt): Layer[] {
+    const moved = edits.updateItems(layers, this.currentLayerId!, [id], (i) => (i.kind === 'point' ? { ...i, p } : i));
+    const res = propagate(moved, [id]);
+    this.stale = res.stale;
+    return res.layers;
+  }
+
+  staleNote(): string {
+    return this.stale ? ` — ${this.stale} élément(s) impossible(s) à construire à cette position, laissé(s) tel(s) quel(s).` : '';
+  }
+
   /** The layers with some items of the current layer changed by f. */
   updatedItems(ids: Iterable<string>, f: (item: Item) => Item): Layer[] {
     return edits.updateItems(this.project!.layers, this.currentLayerId!, ids, f);
@@ -324,27 +412,32 @@ export class App {
     return l;
   }
 
-  /** Add items to the current layer, plus the center point if that option is on. */
-  addItems(items: Item[], label: string, center?: Pt): void {
-    this.replaceItems([], items, label, center);
+  /** Add items to the current layer. */
+  addItems(items: Item[], label: string): void {
+    this.replaceItems([], items, label);
   }
 
-  replaceItems(removeIds: string[], items: Item[], label: string, center?: Pt): void {
+  replaceItems(removeIds: string[], items: Item[], label: string): void {
     const l = this.requireLayer();
     if (!l || (items.length === 0 && removeIds.length === 0)) return;
-    const all = [...items];
-    if (center && this.options.drawCenter) all.push({ kind: 'point', ...this.stroke(), p: center, weight: 0 });
-    this.commit(label, edits.replaceItems(this.project!.layers, l.id, removeIds, all));
+    this.commit(label, edits.replaceItems(this.project!.layers, l.id, removeIds, items));
     for (const id of removeIds) this.selection.delete(id);
   }
 
-  /** Add the figures computed by a construction, in the current color and width. */
-  addShapes(shapes: Shape[], label: string, opts: { center?: Pt; remove?: string[]; width?: number } = {}): void {
-    const items = shapes.map((s) => ({ ...s, ...this.stroke(), ...(opts.width ? { width: opts.width } : {}) }) as Item);
-    this.replaceItems(opts.remove ?? [], items, label, opts.center);
+  /**
+   * Add the figures computed by a construction, in the current color and
+   * width, plus its center point if that option is on. With `link`, they
+   * follow their sources when these move.
+   */
+  addShapes(shapes: Shape[], label: string, opts: { center?: Pt; remove?: string[]; width?: number; link?: { recipe: string; sources: Source[] } } = {}): void {
+    const links = opts.link ? linksFor(opts.link.recipe, opts.link.sources, shapes.length) : null;
+    const items = shapes.map((s, i) => ({ ...s, ...this.stroke(), ...(opts.width ? { width: opts.width } : {}), ...(links ? { link: links.shapes[i] } : {}) }) as Item);
+    if (opts.center && this.options.drawCenter) items.push({ kind: 'point', ...this.stroke(), p: opts.center, weight: 0, ...(links ? { link: links.center } : {}) });
+    this.replaceItems(opts.remove ?? [], items, label);
   }
 
-  async addPoint(p: Pt): Promise<void> {
+  /** A point; on an intersection, a middle, an end or a center, it follows that spot. */
+  async addPoint(p: Pt, snap: SnapPoint | null = null): Promise<void> {
     if (!this.requireLayer()) return;
     let weight = 0;
     if (this.options.weights) {
@@ -352,7 +445,8 @@ export class App {
       if (w === null) return;
       weight = Math.round(w);
     }
-    this.addShapes([{ kind: 'point', p, weight }], 'point');
+    const link = snap && snap.kind !== 'point' ? { recipe: '@point', sources: [clickSource(p, snap, (id) => this.findItem(id)?.item)] } : undefined;
+    this.addShapes([{ kind: 'point', p, weight }], 'point', { link });
   }
 
   undo(): void {
@@ -466,7 +560,8 @@ export class App {
     const arc = this.editableSelection().find((i) => i.kind === 'arc');
     if (!arc || arc.kind !== 'arc') return this.cannot('modifier');
     const a = await promptNumber('Angle de l\'arc', 'Angle (positif : sens anti-horaire)', arc.span, { unit: '°', min: -360, max: 360, hint: `soit ${fmt((arc.span * Math.PI) / 180, 4)} rad` });
-    if (a !== null) this.updateItem(arc.id, { span: a }, 'angle de l\'arc');
+    // Changed by hand: the arc no longer follows its construction.
+    if (a !== null) this.updateItem(arc.id, { span: a, link: undefined }, 'angle de l\'arc');
   }
 
   async addPicture(): Promise<void> {
@@ -487,6 +582,20 @@ export class App {
     this.addItems([item], 'image');
     this.setTool('select');
     this.setSelection([item.id]);
+  }
+
+  /** Points at the intersections of the selected items (I key). */
+  addIntersections(): void {
+    if (!this.requireLayer()) return;
+    const items = this.selectedItems().map((h) => h.item).filter((i) => isStroke(i) && i.kind !== 'point');
+    if (items.length < 2) return this.status('Sélectionnez au moins 2 droites, cercles ou arcs (Ctrl+clic), puis [I] pour placer leurs points d\'intersection.');
+    const existing = this.currentLayer!.items.flatMap((i) => (i.kind === 'point' ? [i.p] : []));
+    const pts = crossings(items).filter((c) => !existing.some((q) => dist(c.p, q) < 1e-6));
+    if (!pts.length) return this.status('Aucune nouvelle intersection entre les éléments sélectionnés.');
+    const find = (id: string) => this.findItem(id)?.item;
+    const points = pts.map((c) => ({ kind: 'point', ...this.stroke(), p: c.p, weight: 0, link: linksFor('@point', [clickSource(c.p, c, find)], 1).shapes[0] }) as Item);
+    this.addItems(points, 'intersections');
+    this.status(`${pts.length} point(s) d'intersection ajouté(s) : ils suivront les éléments si ceux-ci bougent.`);
   }
 
   async centerOfMass(): Promise<void> {
@@ -583,8 +692,10 @@ export class App {
       await store.putFile(p.id, name, blob);
       await this.session.loadPicture(name, blob, false);
     }
-    const added: Layer[] = [];
+    let added: Layer[] = [];
     for (const { layer } of layers) added.push({ ...layer, name: edits.uniqueLayerName([...p.layers, ...added], layer.name) });
+    // A layer imported twice gets new ids, its links following.
+    added = uniqueIds(added, new Set(p.layers.flatMap((l) => l.items.map((i) => i.id))));
     this.currentLayerId = added[added.length - 1].id;
     this.commit('import de calque', [...p.layers, ...added]);
     this.status(`${added.length} calque(s) importé(s).`);
@@ -669,6 +780,27 @@ export class App {
     if (r === 'delete') this.setAnchors(others);
     else this.setAnchors([...others, { id: existing?.id ?? newId('g'), p, name: r.name || 'repère', lat: r.ll.lat, lon: r.ll.lon }]);
     this.status(this.georefSummary(this.toolId === 'georef'));
+  }
+
+  /** Points on towns given by their name, with their weights (needs the GPS calibration). */
+  async placeTowns(): Promise<void> {
+    const layer = this.requireLayer();
+    if (!layer) return;
+    const g = this.georef();
+    if (!g) {
+      await alertDialog('Placer des villes par leur nom', 'Calez d\'abord la carte : panneau « Position GPS », au moins 2 villes (mieux : 6 à 10).');
+      return;
+    }
+    const map = this.mapPicture();
+    const inMap = (ll: LatLon) => {
+      const p = g.toPx(ll);
+      return !map || (p.x >= 0 && p.y >= 0 && p.x <= map.w && p.y <= map.h);
+    };
+    const towns = await townsDialog(inMap);
+    if (!towns?.length || this.georef() !== g) return;
+    this.addShapes(towns.map((t) => ({ kind: 'point', p: g.toPx(t.ll), weight: t.weight, label: t.name })), 'villes');
+    const weighted = towns.some((t) => t.weight !== 0);
+    this.status(`${towns.length} ville(s) placée(s) dans le calque « ${layer.name} ».${weighted && !this.options.weights ? ' Affichage → « Afficher les poids » pour voir les poids.' : ''}`);
   }
 
   async toggleGray(): Promise<void> {
@@ -784,7 +916,7 @@ export class App {
     this.saveOptions();
   }
 
-  toggleOption(k: 'drawCenter' | 'weights' | 'minimap'): void {
+  toggleOption(k: 'drawCenter' | 'weights' | 'minimap' | 'snapFigures'): void {
     this.options[k] = !this.options[k];
     this.saveOptions();
     this.onChange();

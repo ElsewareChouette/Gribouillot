@@ -41,7 +41,9 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 | `src/input.ts` | souris, tactile, clavier |
 | `src/session.ts` | ouverture, sauvegarde automatique, import / export d'un projet |
 | `src/geo.ts` | calage GPS : Lambert-93, ajustement sur les repères, précision mesurée, lecture des coordonnées |
-| `src/places.ts` | recherche de communes (geo.api.gouv.fr, demande internet) |
+| `src/places.ts` | recherche de communes (geo.api.gouv.fr, demande internet), listes de villes |
+| `src/intersections.ts` | intersections, milieux, extrémités, centres : aimantation et commande [I] |
+| `src/links.ts` | constructions liées : un tracé est reconstruit quand ce dont il dépend bouge |
 | `src/describe.ts` | texte de la barre d'état sur la sélection (longueurs, angles) |
 | `src/render.ts` | rendu Canvas (épaisseurs indépendantes du zoom) |
 | `src/images.ts` | images décodées + copies réduites pour les très grandes cartes |
@@ -54,7 +56,13 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 
 En plus des fonctions de la 2.2 :
 
-- aperçu en direct de toutes les constructions, aimantation sur les points ;
+- aperçu en direct de toutes les constructions ;
+- aimantation sur les points, et aussi sur les intersections, les milieux et extrémités des
+  segments, les centres (option du menu Affichage) ; [I] place les points d'intersection
+  des éléments sélectionnés ;
+- constructions liées : avec l'outil Sélection, on glisse un point et ce qui est construit
+  dessus suit (droites, cercles, arcs, points d'intersection…), voir ci-dessous ;
+- villes placées par leur nom, avec leur poids (Édition → Placer des villes par leur nom) ;
 - annuler/rétablir aussi pour les calques (création, suppression, ordre, nom) et les images ;
 - calques réordonnables par glisser-déposer ;
 - zoom centré sur le curseur, borné, pincement à deux doigts sur écran tactile ;
@@ -82,5 +90,23 @@ Sur le scan de la Michelin 989 de Zarquos (`tests/fixtures/zarquos-989.json`, 42
 visées au centre de leur rond) : écart type 0,4 km, au pire 1,1 km ; avec 10 communes
 seulement, 0,6 km sur les 32 autres. Ce scan fait 128,5 m par pixel, pas 127.
 
+Édition → *Placer des villes par leur nom* : une liste de communes, une par ligne, avec si
+besoin le département entre parenthèses et un poids (« Clisson ; 3 », « Saint-Pierre (44) 2 »).
+Chaque nom est vérifié (homonymes au choix, noms approchés signalés), puis la commune est placée
+à la position de sa mairie, avec son nom affiché à côté du point.
+
 Les repères sont exportés à côté du `.grib`, dans `<projet>.web.json`, que la version bureau
 ignore.
+
+## Constructions liées
+
+Chaque tracé fait avec un outil retient d'où viennent ses données : un point cliqué, une
+intersection, un milieu, un centre, un élément de référence, une longueur ou un angle saisis.
+Quand on glisse un point (outil Sélection, calque courant), tout ce qui en dépend est
+reconstruit dans l'ordre de création. Ne suivent que les données prises sur la figure : un
+clic dans le vide reste une position fixe. Un point construit (intersection…) ne se glisse
+pas, il suit ses éléments. Changer l'angle d'un arc à la main ([A]) le détache.
+
+Ces liens et les identifiants des éléments sont écrits dans les `.xml`, en attributs `wid` et
+`link` que la version bureau ne lit pas (elle les perd si elle réenregistre le calque : les
+tracés restent, sans lien).

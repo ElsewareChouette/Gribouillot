@@ -148,3 +148,25 @@ describe('the Michelin 989 map (Zarquos scan)', () => {
     expect(g.max!).toBeGreaterThan(8);
   });
 });
+
+describe('lists of towns', () => {
+  it('names, departments and weights', async () => {
+    const { parseTownList } = await import('../src/places');
+    expect(parseTownList('Clisson\n  Nantes ; 3\nSaint-Pierre (44) 2\nLes Pieux, -1\n\nBourg-en-Bresse\t12\nPont-l\'Évêque (14)')).toEqual([
+      { name: 'Clisson', weight: 0 },
+      { name: 'Nantes', weight: 3 },
+      { name: 'Saint-Pierre', dept: '44', weight: 2 },
+      { name: 'Les Pieux', weight: -1 },
+      { name: 'Bourg-en-Bresse', weight: 12 },
+      { name: 'Pont-l\'Évêque', dept: '14', weight: 0 },
+    ]);
+    expect(parseTownList('Corse (2A) 1')[0]).toEqual({ name: 'Corse', dept: '2A', weight: 1 });
+  });
+
+  it('comparable names', async () => {
+    const { townKey } = await import('../src/places');
+    expect(townKey('St-Étienne')).toBe(townKey('Saint Étienne'));
+    expect(townKey('Ste-Foy-lès-Lyon')).toBe('sainte foy les lyon');
+    expect(townKey('L’Aiguillon')).toBe(townKey("l'aiguillon"));
+  });
+});

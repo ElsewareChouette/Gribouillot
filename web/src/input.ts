@@ -7,7 +7,7 @@
 import type { App } from './app';
 import { ZOOM_STEP } from './camera';
 import { dist, mid, pt, type Pt, type Rect } from './geom';
-import type { Layer, PixmapItem } from './model';
+import type { Layer, PixmapItem, PointItem } from './model';
 import { itemTouchesRect } from './shapes';
 import { TOOLS, type ToolEvent, type ToolId } from './tools';
 import { popupMenu } from './ui/dialogs';
@@ -17,10 +17,11 @@ import { icon } from './ui/icons';
 const DRAG_THRESHOLD = 5; // px
 
 type Drag =
-  | { kind: 'pending'; start: Pt; last: Pt; button: number; pixmap?: PixmapItem; ctrl: boolean; shift: boolean }
+  | { kind: 'pending'; start: Pt; last: Pt; button: number; pixmap?: PixmapItem; point?: PointItem; ctrl: boolean; shift: boolean }
   | { kind: 'pan'; last: Pt }
   | { kind: 'rubber'; start: Pt; end: Pt; additive: boolean }
   | { kind: 'movePixmap'; id: string; startScene: Pt; orig: Pt; before: Layer[] }
+  | { kind: 'movePoint'; id: string; offset: Pt; before: Layer[] }
   | { kind: 'pinch'; dist: number; mid: Pt };
 
 export function normRect(a: Pt, b: Pt): Rect {
@@ -71,9 +72,8 @@ export class Input {
   private toolEvent(screen: Pt, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): ToolEvent {
     const app = this.app;
     const raw = app.cam.toScene(screen);
-    const snaps = app.tool.draws || app.toolId === 'measure' || app.toolId === 'protractor' || app.toolId === 'calibrate' || app.toolId === 'georef';
-    const snapped = snaps ? app.snapTarget(screen) : null;
-    return { p: snapped ?? raw, raw, screen, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
+    const snap = app.snaps() ? app.snap(screen) : null;
+    return { p: snap?.p ?? raw, raw, snap, screen, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
   }
 
   private screenPos(e: { clientX: number; clientY: number }): Pt {
@@ -106,11 +106,13 @@ export class Input {
     }
     if (e.button !== 0) return;
     let pixmap: PixmapItem | undefined;
+    let point: PointItem | undefined;
     if (app.toolId === 'select') {
       const hit = app.pick(s);
-      if (hit?.item.kind === 'pixmap' && hit.layer.id === app.currentLayerId) pixmap = hit.item;
+      if (hit?.layer.id === app.currentLayerId && hit.item.kind === 'pixmap') pixmap = hit.item;
+      if (hit?.layer.id === app.currentLayerId && hit.item.kind === 'point') point = hit.item;
     }
-    this.drag = { kind: 'pending', start: s, last: s, button: e.button, pixmap, ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
+    this.drag = { kind: 'pending', start: s, last: s, button: e.button, pixmap, point, ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
   }
 
   private pointerMove(e: PointerEvent): void {
@@ -140,7 +142,12 @@ export class Input {
       if (app.toolId === 'select' && d.pixmap) {
         app.setSelection([d.pixmap.id]);
         this.drag = { kind: 'movePixmap', id: d.pixmap.id, startScene: app.cam.toScene(d.start), orig: pt(d.pixmap.x, d.pixmap.y), before: p.layers };
+      } else if (app.toolId === 'select' && d.point && !d.point.link) {
+        app.setSelection([d.point.id]);
+        const start = app.cam.toScene(d.start);
+        this.drag = { kind: 'movePoint', id: d.point.id, offset: pt(d.point.p.x - start.x, d.point.p.y - start.y), before: p.layers };
       } else if (app.toolId === 'select') {
+        if (d.point?.link) app.status('Ce point est construit (intersection, milieu…) : il suit les éléments dont il dépend. Déplacez plutôt ceux-ci.');
         this.drag = { kind: 'rubber', start: d.start, end: s, additive: d.ctrl || d.shift };
       } else {
         this.drag = { kind: 'pan', last: d.start };
@@ -159,11 +166,21 @@ export class Input {
       app.requestRender();
       return;
     }
+    if (d2?.kind === 'movePoint') {
+      // Each move starts from the previous one: the figure follows step by step.
+      app.showLayers(app.movedPoint(p.layers, d2.id, pt(scene.x + d2.offset.x, scene.y + d2.offset.y)));
+      return;
+    }
     if (d2?.kind === 'movePixmap') {
       // Live move, recorded as one undoable change when the button is released.
       const x = d2.orig.x + scene.x - d2.startScene.x, y = d2.orig.y + scene.y - d2.startScene.y;
       app.showLayers(app.updatedItems([d2.id], (i) => (i.kind === 'pixmap' ? { ...i, x, y } : i)));
       return;
+    }
+    if (!d2 && app.toolId === 'select') {
+      const hit = app.pick(s);
+      const movable = hit?.layer.id === app.currentLayerId && hit.item.kind === 'point' && !hit.item.link;
+      this.canvas.style.cursor = movable ? 'move' : app.tool.cursor;
     }
     app.tool.move(app, this.toolEvent(s, e));
     app.requestRender();
@@ -198,10 +215,12 @@ export class Input {
         app.setSelection(ids);
         break;
       }
-      case 'movePixmap': {
+      case 'movePixmap':
+      case 'movePoint': {
         const after = app.project.layers;
         app.showLayers(d.before);
-        if (after !== d.before) app.commit('déplacer l\'image', after);
+        if (after !== d.before) app.commit(d.kind === 'movePoint' ? 'déplacer le point' : 'déplacer l\'image', after);
+        if (d.kind === 'movePoint') app.status(app.selectionStatus() + app.staleNote());
         break;
       }
     }
@@ -290,6 +309,7 @@ export class Input {
         else if (k === 't') void app.chooseWidth();
         else if (k === 'w') void app.editPointWeight();
         else if (k === 'a') void app.editArcAngle();
+        else if (k === 'i') app.addIntersections();
         else if (k === 's') void app.spiralOptions();
         else if (k === 'f') app.zoomToFit();
         else if (k === '+' || k === '=') app.zoom(ZOOM_STEP);

@@ -88,6 +88,8 @@ function buildMenus(app: App): void {
       { label: 'Angle de l\'arc…', key: 'A', run: () => app.editArcAngle(), disabled: need() },
       { group: 'Constructions' },
       { label: 'Importer une image dans le calque…', run: () => app.addPicture(), disabled: need() },
+      { label: 'Placer des villes par leur nom…', run: () => app.placeTowns(), disabled: need() },
+      { label: 'Points d\'intersection de la sélection', key: 'I', run: () => app.addIntersections(), disabled: need() },
       { label: 'Centre de masse des points pondérés', run: () => app.centerOfMass(), disabled: need() },
     ]),
     menuButton('Affichage', () => [
@@ -99,6 +101,7 @@ function buildMenus(app: App): void {
       { label: 'Mini-carte', checked: app.options.minimap, run: () => app.toggleOption('minimap') },
       { label: 'Carte en noir et blanc', checked: app.options.gray, run: () => app.toggleGray(), disabled: need() },
       { label: 'Afficher les poids et les demander', checked: app.options.weights, run: () => app.toggleOption('weights') },
+      { label: 'Aimanter aux intersections, milieux et centres', checked: app.options.snapFigures, run: () => app.toggleOption('snapFigures') },
       { label: 'Placer le centre des cercles et arcs', checked: app.options.drawCenter, run: () => app.toggleOption('drawCenter') },
       { label: 'Options de la spirale…', key: 'S', run: () => app.spiralOptions() },
       { label: 'Panneau latéral', checked: !document.body.classList.contains('no-sidebar'), run: () => document.body.classList.toggle('no-sidebar') },
@@ -308,6 +311,7 @@ function gpsSection(app: App): HTMLElement {
   pin.classList.toggle('active', app.toolId === 'georef');
   const summary = app.georefSummary().replace(/^Calage GPS : /, '').replace(/ — transformation .*$/, '');
   const content: (Node | null)[] = [h('div', { class: 'map-row' }, pin, h('span', { class: 'gps-summary' }, summary))];
+  if (g) content.push(h('button', { type: 'button', class: 'small towns-btn', title: 'Placer des points sur des villes données par leur nom, avec des poids', onclick: () => void app.placeTowns() }, 'Placer des villes par leur nom…'));
   if (!anchors.length) {
     content.push(h('p', { class: 'hint' }, 'Placez au moins 3 villes bien réparties (mieux : 6 à 10, jusqu\'aux bords de la carte) pour connaître la position GPS de n\'importe quel point. La précision obtenue est affichée.'));
   } else if (app.toolId === 'georef') {
@@ -635,6 +639,7 @@ function shortcutsDialog(): void {
     ['C, T', 'couleur, épaisseur (de la sélection, sinon du dessin)'],
     ['W', 'poids du point sélectionné'],
     ['A', 'angle de l\'arc sélectionné'],
+    ['I', 'points d\'intersection des éléments sélectionnés'],
     ['S', 'options de la spirale'],
     ['Entrée', 'spirale : terminer avec 2 ou 3 centres ; arc et droite à angle : saisir l\'angle'],
     ['Maj', 'spirale : côté perpendiculaire au précédent'],

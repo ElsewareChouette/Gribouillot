@@ -5,12 +5,15 @@
 
 import type { App } from '../app';
 import type { Pt } from '../geom';
+import type { SnapPoint } from '../intersections';
 import type { Renderer, StrokeStyle } from '../render';
 import type { ToolId } from './index';
 
 export interface ToolEvent {
   p: Pt; // scene position, snapped on a point if the mouse is over one
   raw: Pt; // scene position of the mouse
+  /** What `p` snapped on (a point, an intersection…), null if it did not. */
+  snap: SnapPoint | null;
   screen: Pt;
   shift: boolean;
   ctrl: boolean;

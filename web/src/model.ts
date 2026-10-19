@@ -15,12 +15,38 @@ interface Stroke {
   id: string;
   color: string; // #rrggbb
   width: number; // screen pixels, whatever the zoom ("cosmetic" pen)
+  /** How the item was built, to build it again when what it depends on moves (see links.ts). */
+  link?: Link;
+}
+
+/**
+ * Where an input of a construction comes from. The items it refers to are
+ * copied as they were (`frozen`), so that a deleted one still gives a value.
+ */
+export type Source =
+  | { k: 'pt'; p: Pt } // a free click
+  | { k: 'num'; v: number } // a typed length (px) or angle (°)
+  | { k: 'item'; id: string; frozen: StrokeItem } // an item, or a point clicked on
+  | { k: 'snap'; kind: 'intersection' | 'midpoint' | 'end' | 'center'; ids: string[]; frozen: StrokeItem[]; end?: number; p: Pt };
+
+export interface Link {
+  /** Recipe id (constructions.ts), or '@point' for a point on a remarkable spot of the figure. */
+  recipe: string;
+  /** Shared by the items made by one construction. */
+  group: string;
+  /** Creation order: an item only depends on older ones. */
+  seq: number;
+  /** Index of the item among the shapes of the construction; -1 for its center. */
+  out: number;
+  sources: Source[];
 }
 
 export interface PointItem extends Stroke {
   kind: 'point';
   p: Pt;
   weight: number;
+  /** A name shown next to the point (a town placed by its name). Ignored by the desktop version. */
+  label?: string;
 }
 
 export interface SegmentItem extends Stroke {

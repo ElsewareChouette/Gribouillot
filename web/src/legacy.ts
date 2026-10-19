@@ -13,6 +13,7 @@ import {
   newId,
   type Item,
   type Layer,
+  type Link,
   type MapScale,
 } from './model';
 
@@ -335,13 +336,14 @@ export function parseLayerXml(name: string, text: string): ParsedLayer {
   const items: Item[] = [];
   for (const el of xmlElements(text)) {
     const a = el.attrs;
+    const count = items.length;
     switch (el.name) {
       case 'GribouillotLayer':
         layer.visible = (a.Visibility ?? 'true') !== 'false';
         layer.opacity = a.Opacity === undefined ? 100 : Math.max(0, Math.min(100, Math.round(num(a, 'Opacity'))));
         break;
       case 'Point':
-        items.push({ kind: 'point', id: newId(), p: P(a, 'x', 'y'), color: color(a), width: width(a), weight: Math.round(num(a, 'weight')) });
+        items.push({ kind: 'point', id: newId(), p: P(a, 'x', 'y'), color: color(a), width: width(a), weight: Math.round(num(a, 'weight')), ...(a.label ? { label: a.label } : {}) });
         break;
       case 'Segment':
         items.push({ kind: 'segment', id: newId(), p1: P(a, 'x0', 'y0'), p2: P(a, 'x1', 'y1'), color: color(a), width: width(a) });
@@ -381,9 +383,32 @@ export function parseLayerXml(name: string, text: string): ParsedLayer {
         break;
       }
     }
+    if (items.length > count) readWebAttrs(items[items.length - 1], a);
   }
   layer.items = items;
   return { layer, pixmapPaths };
+}
+
+/**
+ * What the web version adds to an item element: its id, and how it was built.
+ * The desktop version reads the attributes by name and skips these ones.
+ */
+function readWebAttrs(it: Item, a: Record<string, string>): void {
+  if (a.wid) it.id = a.wid;
+  if (a.link && it.kind !== 'pixmap') {
+    try {
+      const link = JSON.parse(a.link) as Link;
+      if (link && typeof link.recipe === 'string' && Array.isArray(link.sources)) it.link = link;
+    } catch {
+      /* an unreadable link: the item stays as it is drawn */
+    }
+  }
+}
+
+function webAttrs(it: Item): [string, string][] {
+  const out: [string, string][] = [['wid', it.id]];
+  if (it.kind !== 'pixmap' && it.link) out.push(['link', JSON.stringify(it.link)]);
+  return out;
 }
 
 const n = (v: number) => String(Number.isInteger(v) ? v : +v.toPrecision(12));
@@ -399,33 +424,34 @@ export function writeLayerXml(layer: Layer): string {
     switch (it.kind) {
       case 'point':
         attrs = [['x', n(it.p.x)], ['y', n(it.p.y)], ['color', it.color], ['penWidth', n(it.width)], ['weight', n(it.weight)]];
-        lines.push(el('Point', attrs));
+        if (it.label) attrs.push(['label', it.label]); // read by attribute name: the desktop version skips it
+        lines.push(el('Point', [...attrs, ...webAttrs(it)]));
         break;
       case 'segment':
       case 'line':
         attrs = [['x0', n(it.p1.x)], ['y0', n(it.p1.y)], ['x1', n(it.p2.x)], ['y1', n(it.p2.y)], ['color', it.color], ['penWidth', n(it.width)]];
-        lines.push(el(it.kind === 'line' ? 'Line' : 'Segment', attrs));
+        lines.push(el(it.kind === 'line' ? 'Line' : 'Segment', [...attrs, ...webAttrs(it)]));
         break;
       case 'circle':
         attrs = [['x', n(it.c.x)], ['y', n(it.c.y)], ['radius', n(it.r)], ['color', it.color], ['penWidth', n(it.width)]];
-        lines.push(el('Circle', attrs));
+        lines.push(el('Circle', [...attrs, ...webAttrs(it)]));
         break;
       case 'arc':
         attrs = [['x', n(it.c.x)], ['y', n(it.c.y)], ['radius', n(it.r)], ['startAngle', n(it.start)], ['spanAngle', n(it.span)], ['color', it.color], ['penWidth', n(it.width)]];
-        lines.push(el('Arc', attrs));
+        lines.push(el('Arc', [...attrs, ...webAttrs(it)]));
         break;
       case 'ellipse':
         attrs = [['x1', n(it.f1.x)], ['y1', n(it.f1.y)], ['x2', n(it.f2.x)], ['y2', n(it.f2.y)], ['dSum', n(it.dSum)], ['color', it.color], ['penWidth', n(it.width)]];
-        lines.push(el('Ellipse', attrs));
+        lines.push(el('Ellipse', [...attrs, ...webAttrs(it)]));
         break;
       case 'spiral':
         attrs = it.centers.flatMap((c, i): [string, string][] => [[`x${i}`, n(c.x)], [`y${i}`, n(c.y)]]);
         attrs.push(['color', it.color], ['penWidth', n(it.width)]);
-        lines.push(el('Spiral', attrs));
+        lines.push(el('Spiral', [...attrs, ...webAttrs(it)]));
         break;
       case 'pixmap':
         attrs = [['x', n(it.x)], ['y', n(it.y)], ['scale', n(it.scale)], ['rotation', n(it.rotation)], ['imagePath', './' + it.file]];
-        lines.push(el('Pixmap', attrs));
+        lines.push(el('Pixmap', [...attrs, ...webAttrs(it)]));
         break;
     }
   }
