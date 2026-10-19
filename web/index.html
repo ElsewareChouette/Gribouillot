@@ -7,18 +7,18 @@
     <title>Gribouillot</title>
   </head>
   <body class="no-project">
-    <header id="topbar">
-      <div class="brand">Gribouillot</div>
-      <nav id="menus"></nav>
-      <div id="toolbar"></div>
-    </header>
+    <header id="topbar"></header>
     <main>
-      <div id="stage">
-        <canvas id="canvas" tabindex="0" aria-label="Carte et constructions"></canvas>
-        <div id="scalebar"></div>
-        <canvas id="minimap" title="Mini-carte : cliquer ou glisser pour se déplacer"></canvas>
+      <nav id="rail" aria-label="Outils"></nav>
+      <div id="work">
+        <div id="optionsbar"></div>
+        <div id="stage">
+          <canvas id="canvas" tabindex="0" aria-label="Carte et constructions"></canvas>
+          <div id="scalebar"></div>
+          <canvas id="minimap" title="Mini-carte : cliquer ou glisser pour se déplacer"></canvas>
+        </div>
       </div>
-      <aside id="sidebar"></aside>
+      <aside id="panel"></aside>
     </main>
     <footer id="statusbar">
       <span id="status" aria-live="polite"></span>

@@ -13,7 +13,7 @@ export type PlaceAnswer = { name: string; ll: LatLon } | 'delete' | null;
 export async function placeDialog(title: string, initial?: { name: string; ll: LatLon }): Promise<PlaceAnswer> {
   const search = h('input', { type: 'search', placeholder: 'Nom d\'une commune', autocomplete: 'off' });
   const results = h('ul', { class: 'place-results' });
-  const name = h('input', { type: 'text', value: initial?.name ?? '', required: true });
+  const name = h('input', { type: 'text', value: initial?.name ?? '', required: !!initial });
   const coords = h('input', { type: 'text', value: initial ? decimalLatLon(initial.ll) : '', required: true, placeholder: '45.12345, 1.23456' });
   const read = h('p', { class: 'hint' });
 

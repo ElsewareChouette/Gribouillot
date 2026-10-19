@@ -183,3 +183,24 @@ describe('known maps', () => {
     expect(Math.max(...errs)).toBeLessThan(1.2);
   });
 });
+
+describe('on the ground', () => {
+  it('geodesic distances agree with PROJ (GRS80) to the millimeter', async () => {
+    const { geodesicKm } = await import('../src/geo');
+    expect(geodesicKm({ lat: 47.087, lon: -1.282 }, { lat: 48.5734, lon: 7.7521 })).toBeCloseTo(695.8202847, 6);
+    expect(geodesicKm({ lat: 48.3904, lon: -4.4861 }, { lat: 43.2965, lon: 5.3698 })).toBeCloseTo(950.9838967, 6);
+    expect(geodesicKm({ lat: 47, lon: 2 }, { lat: 47.0001, lon: 2 })).toBeCloseTo(0.011117084, 8);
+  });
+
+  it('the meridians lean on a conic map: north is not up everywhere', async () => {
+    const { meridianAngle } = await import('../src/geo');
+    const g = fitGeoref(anchors(8))!; // a map in Lambert-93, turned by 0.02 rad
+    const turn = (0.02 * 180) / Math.PI;
+    // On the central meridian (3° E) north is up, but for the turn of the scan.
+    expect(meridianAngle(g, toMap(46.5, 3))).toBeCloseTo(turn, 1);
+    // The meridians lean towards the central one (convergence ≈ 0.73 × Δlon):
+    // in Brittany north is right of the top of the sheet, in Alsace left of it.
+    expect(meridianAngle(g, toMap(48.4, -4.5)) - turn).toBeCloseTo(0.7256 * 7.5, 0);
+    expect(meridianAngle(g, toMap(48.6, 7.75)) - turn).toBeCloseTo(-0.7256 * 4.75, 0);
+  });
+});

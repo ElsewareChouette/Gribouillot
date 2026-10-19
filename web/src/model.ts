@@ -7,6 +7,7 @@
  */
 
 import type { Anchor } from './geo';
+import type { MapUnits } from './units';
 import type { Pt } from './geom';
 
 export type ScaleUnit = 'km' | 'm';
@@ -15,6 +16,10 @@ interface Stroke {
   id: string;
   color: string; // #rrggbb
   width: number; // screen pixels, whatever the zoom ("cosmetic" pen)
+  /** Its name (« A », « Bourges », « d1 »), shown on the map. Ignored by the desktop version. */
+  label?: string;
+  /** A free note on it: a quote of the énigme, a madit, a doubt. Ignored by the desktop version. */
+  note?: string;
   /** How the item was built, to build it again when what it depends on moves (see links.ts). */
   link?: Link;
 }
@@ -25,7 +30,7 @@ interface Stroke {
  */
 export type Source =
   | { k: 'pt'; p: Pt } // a free click
-  | { k: 'num'; v: number } // a typed length (px) or angle (°)
+  | { k: 'num'; v: number; expr?: string } // a typed length (px) or angle (°), and the formula typed
   | { k: 'item'; id: string; frozen: StrokeItem } // an item, or a point clicked on
   | { k: 'snap'; kind: 'intersection' | 'midpoint' | 'end' | 'center'; ids: string[]; frozen: StrokeItem[]; end?: number; p: Pt };
 
@@ -45,8 +50,6 @@ export interface PointItem extends Stroke {
   kind: 'point';
   p: Pt;
   weight: number;
-  /** A name shown next to the point (a town placed by its name). Ignored by the desktop version. */
-  label?: string;
 }
 
 export interface SegmentItem extends Stroke {
@@ -122,6 +125,19 @@ export interface Layer {
   items: Item[];
 }
 
+/** An énigme: a group of layers, worked in the order of the game (see enigmas.ts). */
+export interface Group {
+  id: string;
+  code: string; // « 530 »
+  title: string;
+  color: string; // the color of its drawings
+  layerIds: string[];
+  /** The text of the énigme, pasted by the user. */
+  text: string;
+  /** What the user makes of it. */
+  notes: string;
+}
+
 export interface MapScale {
   px: number; // a distance measured on the map, in pixels...
   value: number; // ...corresponds to this real distance...
@@ -140,6 +156,10 @@ export interface Project {
   layers: Layer[];
   /** Points of the map with known GPS coordinates (see geo.ts). */
   anchors?: Anchor[];
+  /** The énigmes, in the order of the game; layers out of them are « other layers ». */
+  groups?: Group[];
+  /** Paper scale, game units, precision, north (see units.ts); defaults when missing. */
+  units?: Partial<MapUnits>;
   /** Zoom and center of the view, restored when reopening the project. */
   view?: { zoom: number; cx: number; cy: number };
 }

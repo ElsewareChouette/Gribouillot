@@ -10,7 +10,7 @@
 import { unzipSync, zipSync, type Zippable } from 'fflate';
 import { uniqueIds } from './links';
 import { baseName, parseGrib, parseLayerXml, writeGrib, writeLayerXml } from './legacy';
-import { emptyProject, newId, type Project } from './model';
+import { emptyProject, newId, type Group, type Project } from './model';
 
 export interface ImportResult {
   project: Project;
@@ -124,6 +124,12 @@ export async function importProject(input: NamedBlob[]): Promise<ImportResult | 
   }
   // Ids saved by the web version: kept, unless the same file was given twice.
   project.layers = uniqueIds(project.layers, new Set());
+  const groups = pendingGroups.get(project);
+  if (groups) {
+    project.groups = groups.map(({ group, layers }) => ({
+      ...group, layerIds: layers.map((n) => project.layers.find((l) => l.name === n)?.id).filter((x): x is string => !!x),
+    }));
+  }
   if (missingLayers.length) warnings.push(`Calque(s) introuvable(s) : ${missingLayers.join(', ')}`);
   if (missingPics.size) warnings.push(`Image(s) introuvable(s) : ${[...missingPics].join(', ')}`);
   return { project, files: projectFiles, warnings, missingMap };
@@ -135,16 +141,48 @@ export async function importProject(input: NamedBlob[]): Promise<ImportResult | 
  */
 const WEB_DATA_EXT = '.web.json';
 
-function writeWebData(project: Project): string | null {
+/** Groups read from a side file, waiting for the layers they name. */
+const pendingGroups = new WeakMap<Project, { group: Group; layers: string[] }[]>();
+
+function writeWebData(project: Project, fileNames: Map<string, string>): string | null {
   const anchors = project.anchors ?? [];
-  if (!anchors.length) return null;
-  return JSON.stringify({ format: 'gribouillot-web', version: 1, anchors: anchors.map(({ name, p, lat, lon }) => ({ name, x: p.x, y: p.y, lat, lon })) }, null, 1);
+  const units = project.units && Object.keys(project.units).length ? project.units : undefined;
+  // The layers of a group by their file name: the ids do not survive an import.
+  const groups = (project.groups ?? []).map(({ code, title, color, text, notes, layerIds }) => ({
+    code, title, color, text, notes, layers: layerIds.map((id) => fileNames.get(id)).filter((n): n is string => !!n),
+  }));
+  if (!anchors.length && !units && !groups.length) return null;
+  return JSON.stringify({
+    format: 'gribouillot-web', version: 1, units, ...(groups.length ? { groups } : {}),
+    anchors: anchors.map(({ name, p, lat, lon }) => ({ name, x: p.x, y: p.y, lat, lon })),
+  }, null, 1);
 }
 
 function readWebData(project: Project, text: string, warnings: string[]): void {
   try {
-    const d = JSON.parse(text) as { anchors?: { name?: unknown; x: unknown; y: unknown; lat: unknown; lon: unknown }[] };
+    const d = JSON.parse(text) as {
+      units?: Record<string, unknown>;
+      groups?: { code?: unknown; title?: unknown; color?: unknown; text?: unknown; notes?: unknown; layers?: unknown }[];
+      anchors?: { name?: unknown; x: unknown; y: unknown; lat: unknown; lon: unknown }[];
+    };
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    if (Array.isArray(d.groups)) {
+      // The layers are read later: their names are kept here, made ids by importProject.
+      pendingGroups.set(project, d.groups.map((g) => ({
+        group: { id: newId('e'), code: str(g.code), title: str(g.title), color: /^#[0-9a-f]{6}$/i.test(str(g.color)) ? str(g.color) : '#000000', text: str(g.text), notes: str(g.notes), layerIds: [] },
+        layers: Array.isArray(g.layers) ? g.layers.filter((x): x is string => typeof x === 'string') : [],
+      })));
+    }
     const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    if (d.units && typeof d.units === 'object') {
+      const u = d.units;
+      project.units = {
+        ...(num(u.paper) ? { paper: num(u.paper)! } : {}),
+        ...(num(u.measure) ? { measure: num(u.measure)! } : {}),
+        ...(num(u.precisionMm) ? { precisionMm: num(u.precisionMm)! } : {}),
+        ...(u.north === 'sheet' || u.north === 'meridian' ? { north: u.north } : {}),
+      };
+    }
     project.anchors = [];
     for (const a of d.anchors ?? []) {
       const x = num(a.x), y = num(a.y), lat = num(a.lat), lon = num(a.lon);
@@ -186,11 +224,13 @@ export async function exportProjectZip(project: Project, getFile: (name: string)
   const entries: Zippable = {};
   const used = new Set<string>();
   const layerNames: string[] = [];
+  const layerFiles = new Map<string, string>();
   for (const layer of project.layers) {
     let name = safeFileName(layer.name);
     for (let i = 2; used.has(name.toLowerCase()); i++) name = `${safeFileName(layer.name)}_${i}`;
     used.add(name.toLowerCase());
     layerNames.push(name);
+    layerFiles.set(layer.id, name);
     entries[folder + name + '.xml'] = [new TextEncoder().encode(writeLayerXml(layer)), { level: 6 }];
   }
   const grib = writeGrib({
@@ -203,7 +243,7 @@ export async function exportProjectZip(project: Project, getFile: (name: string)
     layerNames,
   });
   entries[folder + safeFileName(project.name) + '.grib'] = [new TextEncoder().encode(grib), { level: 6 }];
-  const extra = writeWebData(project);
+  const extra = writeWebData(project, layerFiles);
   if (extra) entries[folder + safeFileName(project.name) + WEB_DATA_EXT] = [new TextEncoder().encode(extra), { level: 6 }];
   const fileNames = new Set<string>();
   if (project.mapFile) fileNames.add(project.mapFile);

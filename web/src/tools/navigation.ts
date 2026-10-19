@@ -71,19 +71,19 @@ export class MeasureTool extends Tool {
   }
 
   protected done(app: App, a: Pt, b: Pt): void {
-    app.status(`Distance : ${app.formatLength(dist(a, b), 2)} — cliquez pour une nouvelle mesure.`);
+    app.status(`Distance : ${app.distanceText(a, b)} — cliquez pour une nouvelle mesure.`);
   }
 
   move(app: App, e: ToolEvent): void {
     super.move(app, e);
-    if (this.origin && !this.end) app.status(`Distance : ${app.formatLength(dist(this.origin, e.p), 2)}`);
+    if (this.origin && !this.end) app.status(`Distance : ${app.distanceText(this.origin, e.p)}`);
   }
 
   overlay(r: Renderer, app: App): void {
     const b = this.end ?? this.mouse;
     if (!this.origin || !b) return;
     guideLine(r, this.origin, b);
-    r.text(mid(this.origin, b), app.formatLength(dist(this.origin, b), 2), { dx: 8, dy: -8, bold: true });
+    r.text(mid(this.origin, b), app.formatLength(dist(this.origin, b)), { dx: 8, dy: -8, bold: true });
   }
 }
 

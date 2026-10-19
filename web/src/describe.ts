@@ -12,7 +12,12 @@ import { fmt } from './ui/dom';
  * `len` writes a length in pixels in the unit of the map, `gps` a position
  * in GPS coordinates (null when the map is not calibrated).
  */
-export function describeSelection(sel: Item[], len: (px: number) => string, gps: (p: Pt) => string | null = () => null): string {
+export function describeSelection(
+  sel: Item[],
+  len: (px: number) => string,
+  gps: (p: Pt) => string | null = () => null,
+  between: (a: Pt, b: Pt) => string = (a, b) => len(dist(a, b)),
+): string {
   if (sel.length === 0) return '';
   const gpsOf = (p: Pt, what = 'GPS') => {
     const g = gps(p);
@@ -21,17 +26,17 @@ export function describeSelection(sel: Item[], len: (px: number) => string, gps:
   if (sel.length === 1) {
     const it = sel[0];
     const built = it.kind !== 'pixmap' && it.link ? ' — construit : suit les éléments dont il dépend' : '';
-    return describeOne(it, len, gpsOf) + built;
+    return describeOne(it, len, gpsOf, between) + built;
   }
-  return describeMany(sel, len);
+  return describeMany(sel, len, between);
 }
 
-function describeOne(it: Item, len: (px: number) => string, gpsOf: (p: Pt, what?: string) => string): string {
+function describeOne(it: Item, len: (px: number) => string, gpsOf: (p: Pt, what?: string) => string, between: (a: Pt, b: Pt) => string): string {
   switch (it.kind) {
     case 'point':
       return `${it.label ? `${it.label} : point` : 'Point'} (${fmt(it.p.x, 1)} ; ${fmt(it.p.y, 1)})${gpsOf(it.p)}${it.weight ? `, poids ${it.weight}` : ''} — [W] : changer le poids`;
     case 'segment':
-      return `Segment de longueur ${len(dist(it.p1, it.p2))}`;
+      return `Segment de longueur ${between(it.p1, it.p2)}`;
     case 'line':
       return 'Droite infinie';
     case 'circle':
@@ -47,7 +52,7 @@ function describeOne(it: Item, len: (px: number) => string, gpsOf: (p: Pt, what?
   }
 }
 
-function describeMany(sel: Item[], len: (px: number) => string): string {
+function describeMany(sel: Item[], len: (px: number) => string, between: (a: Pt, b: Pt) => string): string {
   const lines = sel.filter((i) => i.kind === 'segment' || i.kind === 'line');
   const points = sel.filter((i) => i.kind === 'point');
   const circles = sel.filter((i) => i.kind === 'circle');
@@ -62,7 +67,7 @@ function describeMany(sel: Item[], len: (px: number) => string): string {
     return `Distance orthogonale entre le point et la droite : ${len(distToLine(points[0].p, lines[0].p1, lines[0].p2))}`;
   }
   if (sel.length === 2 && points.length === 2) {
-    return `Distance entre les 2 points : ${len(dist(points[0].p, points[1].p))}`;
+    return `Distance entre les 2 points : ${between(points[0].p, points[1].p)}`;
   }
   if (sel.length === 2 && points.length === 1 && circles.length === 1) {
     const d = dist(points[0].p, circles[0].c);

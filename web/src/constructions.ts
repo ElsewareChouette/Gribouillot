@@ -20,6 +20,7 @@ import {
   dx,
   dy,
   extendLine,
+  LINE_EXTENT,
   mid,
   mul,
   normalVector,
@@ -84,6 +85,13 @@ export type Step =
       initial?: (inputs: Input[]) => number;
       hint?: (inputs: Input[], units: Units) => string | undefined;
     }
+  /**
+   * A direction typed in a dialog: an azimuth or a cardinal point (« NE »,
+   * « sud-ouest », « N 30° E »); the recipe gets the azimuth on the sheet,
+   * in degrees clockwise from the top (the tool turns a geographic north
+   * into the sheet's one).
+   */
+  | { take: 'azimuth'; title: string; label: string }
   /**
    * An angle swept by the mouse from `side` (center -> first direction),
    * or typed in a dialog after [Enter] when `prompt` is given.
@@ -494,6 +502,110 @@ const angleLine: Recipe = {
   },
 };
 
+/* ------------------------------------------------------------ directions */
+
+/** Far enough to cross the whole map, like the desktop lines. */
+const RAY = 2 * LINE_EXTENT;
+
+/** A half-line: a segment from p, far away in the direction (dx, dy). */
+function ray(p: Pt, d: Pt): Shape[] {
+  const n = Math.hypot(d.x, d.y);
+  return n ? [{ kind: 'segment', p1: p, p2: add(p, mul(d, RAY / n)) }] : [];
+}
+
+/** Direction of an azimuth on the sheet (degrees clockwise from the top). */
+const azimuthVector = (az: number): Pt => pt(Math.sin((az * Math.PI) / 180), -Math.cos((az * Math.PI) / 180));
+
+const halfLine: Recipe = {
+  id: 'halfLine',
+  label: 'demi-droite',
+  markers: true,
+  steps: [
+    { take: 'point', tip: 'Demi-droite : cliquez son origine.' },
+    { take: 'point', tip: 'Demi-droite : cliquez un point de sa direction.', refuse: (p, [a]) => (samePt(p, a as Pt) ? '' : undefined) },
+  ],
+  build: ([a, b]) => ok(ray(a as Pt, sub(b as Pt, a as Pt))),
+};
+
+const extension: Recipe = {
+  id: 'extension',
+  label: 'prolongement',
+  markers: true,
+  steps: [
+    { take: 'point', tip: 'Prolongement de A→B : cliquez A.' },
+    { take: 'point', tip: 'Prolongement de A→B : cliquez B, d\'où part le prolongement.', refuse: (p, [a]) => (samePt(p, a as Pt) ? '' : undefined) },
+  ],
+  build: ([a, b]) => ok(ray(b as Pt, sub(b as Pt, a as Pt))),
+};
+
+const azimuthRay: Recipe = {
+  id: 'azimuthRay',
+  label: 'direction',
+  keep: 1,
+  steps: [
+    { take: 'point', tip: 'Direction : cliquez son origine.' },
+    { take: 'azimuth', title: 'Direction', label: 'Azimut ou point cardinal' },
+  ],
+  again: 'Direction : une autre direction depuis le même point ([Échap] pour changer de point).',
+  build: ([a, az]) => ok(ray(a as Pt, azimuthVector(az as number))),
+};
+
+const azimuthLine: Recipe = {
+  id: 'azimuthLine',
+  label: 'droite d\'azimut',
+  keep: 1,
+  steps: [
+    { take: 'point', tip: 'Droite d\'azimut : cliquez un point de passage.' },
+    { take: 'azimuth', title: 'Droite d\'azimut', label: 'Azimut ou point cardinal' },
+  ],
+  again: 'Droite d\'azimut : une autre depuis le même point ([Échap] pour changer de point).',
+  build: ([a, az]) => ok(lineThrough(a as Pt, add(a as Pt, azimuthVector(az as number)))),
+};
+
+/** A distance carried along a line, from a point, in a sense: a point and the segment that leads to it. */
+const carry: Recipe = {
+  id: 'carry',
+  label: 'report de distance',
+  preselect: 1,
+  steps: [
+    { take: 'item', kinds: LINES, tip: 'Report : sélectionnez la droite le long de laquelle reporter.' },
+    { take: 'point', tip: 'Report : cliquez le point de départ (sur la droite).', onto: (p, [ref]) => projectOnLine(p, (ref as LineItem).p1, (ref as LineItem).p2) },
+    {
+      take: 'point', raw: true, tip: 'Report : cliquez de quel côté reporter.',
+      onto: (p, [ref]) => projectOnLine(p, (ref as LineItem).p1, (ref as LineItem).p2),
+      refuse: (p, [, a]) => (samePt(p, a as Pt) ? '' : undefined),
+    },
+    { take: 'length', title: 'Report de distance', label: 'Distance à reporter' },
+  ],
+  build: ([, a, side, len]) => {
+    const d = sub(side as Pt, a as Pt);
+    const n = Math.hypot(d.x, d.y);
+    if (!n) return fail('Le côté du report doit être différent du point de départ.');
+    const end = add(a as Pt, mul(d, (len as number) / n));
+    return ok([{ kind: 'segment', p1: a as Pt, p2: end }, { kind: 'point', p: end, weight: 0 }]);
+  },
+  draft: ({ r }, [, a]) => {
+    if (a) r.point(a as Pt, '#ffd400', 7);
+  },
+};
+
+/** The center (centroid) of 3 points. */
+const centroid: Recipe = {
+  id: 'centroid',
+  label: 'centre de 3 points',
+  markers: true,
+  preselect: 3,
+  steps: [
+    { take: 'point', tip: 'Centre : cliquez un premier point.' },
+    { take: 'point', tip: 'Centre : cliquez un deuxième point.' },
+    { take: 'point', tip: 'Centre : cliquez le troisième point.' },
+  ],
+  build: ([a, b, c]) => {
+    const [p, q, r] = [a, b, c] as Pt[];
+    return ok([{ kind: 'point', p: pt((p.x + q.x + r.x) / 3, (p.y + q.y + r.y) / 3), weight: 0 }]);
+  },
+};
+
 /* ------------------------------------------------------------------- arc */
 
 const arc: Recipe = {
@@ -581,4 +693,10 @@ export const RECIPES = {
   ellipse,
   arcFromCircle,
   arc,
+  halfLine,
+  extension,
+  azimuthRay,
+  azimuthLine,
+  carry,
+  centroid,
 } satisfies Record<string, Recipe>;

@@ -343,7 +343,7 @@ export function parseLayerXml(name: string, text: string): ParsedLayer {
         layer.opacity = a.Opacity === undefined ? 100 : Math.max(0, Math.min(100, Math.round(num(a, 'Opacity'))));
         break;
       case 'Point':
-        items.push({ kind: 'point', id: newId(), p: P(a, 'x', 'y'), color: color(a), width: width(a), weight: Math.round(num(a, 'weight')), ...(a.label ? { label: a.label } : {}) });
+        items.push({ kind: 'point', id: newId(), p: P(a, 'x', 'y'), color: color(a), width: width(a), weight: Math.round(num(a, 'weight')) });
         break;
       case 'Segment':
         items.push({ kind: 'segment', id: newId(), p1: P(a, 'x0', 'y0'), p2: P(a, 'x1', 'y1'), color: color(a), width: width(a) });
@@ -395,6 +395,8 @@ export function parseLayerXml(name: string, text: string): ParsedLayer {
  */
 function readWebAttrs(it: Item, a: Record<string, string>): void {
   if (a.wid) it.id = a.wid;
+  if (a.label && it.kind !== 'pixmap') it.label = a.label;
+  if (a.note && it.kind !== 'pixmap') it.note = a.note;
   if (a.link && it.kind !== 'pixmap') {
     try {
       const link = JSON.parse(a.link) as Link;
@@ -407,6 +409,8 @@ function readWebAttrs(it: Item, a: Record<string, string>): void {
 
 function webAttrs(it: Item): [string, string][] {
   const out: [string, string][] = [['wid', it.id]];
+  if (it.kind !== 'pixmap' && it.label) out.push(['label', it.label]);
+  if (it.kind !== 'pixmap' && it.note) out.push(['note', it.note]);
   if (it.kind !== 'pixmap' && it.link) out.push(['link', JSON.stringify(it.link)]);
   return out;
 }
@@ -424,7 +428,6 @@ export function writeLayerXml(layer: Layer): string {
     switch (it.kind) {
       case 'point':
         attrs = [['x', n(it.p.x)], ['y', n(it.p.y)], ['color', it.color], ['penWidth', n(it.width)], ['weight', n(it.weight)]];
-        if (it.label) attrs.push(['label', it.label]); // read by attribute name: the desktop version skips it
         lines.push(el('Point', [...attrs, ...webAttrs(it)]));
         break;
       case 'segment':

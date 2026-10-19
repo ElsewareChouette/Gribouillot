@@ -169,7 +169,7 @@ export class Renderer {
   }
 
   /** Draw one item, with its selection highlight if needed. */
-  item(it: Item, opts: { selected: boolean; alpha: number; showWeight: boolean; pictures: Map<string, Picture>; dpr: number }): void {
+  item(it: Item, opts: { selected: boolean; alpha: number; showWeight: boolean; showNames?: boolean; pictures: Map<string, Picture>; dpr: number }): void {
     const a = opts.alpha;
     if (it.kind === 'pixmap') {
       const pic = opts.pictures.get(it.file);
@@ -183,7 +183,7 @@ export class Renderer {
       case 'point':
         this.point(it.p, it.color, it.width, a);
         if (opts.showWeight && it.weight !== 0) this.text(it.p, String(it.weight), { color: it.color, size: 20, bold: true, dx: 7, dy: 16 });
-        if (it.label) this.text(it.p, it.label, { color: it.color, size: 13, bold: true, dx: 7, dy: -6 });
+        if (it.label && opts.showNames !== false) this.text(it.p, it.label, { color: it.color, size: 13, bold: true, dx: 7, dy: -6 });
         break;
       default:
         this.outline(it, s);
@@ -234,12 +234,12 @@ export class Renderer {
     x.setLineDash([]);
   }
 
-  layers(layers: Layer[], opts: { selection: Set<string>; showWeight: boolean; pictures: Map<string, Picture>; dpr: number }): void {
+  layers(layers: Layer[], opts: { selection: Set<string>; showWeight: boolean; showNames?: boolean; pictures: Map<string, Picture>; dpr: number }): void {
     for (const l of layers) {
       if (!l.visible) continue;
       const alpha = l.opacity / 100;
       for (const it of l.items) {
-        this.item(it, { selected: opts.selection.has(it.id), alpha, showWeight: opts.showWeight, pictures: opts.pictures, dpr: opts.dpr });
+        this.item(it, { selected: opts.selection.has(it.id), alpha, showWeight: opts.showWeight, showNames: opts.showNames, pictures: opts.pictures, dpr: opts.dpr });
       }
     }
   }

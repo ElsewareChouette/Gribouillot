@@ -131,3 +131,37 @@ describe('spiral', () => {
     expect(dist(first.c, pt(10, 0))).toBeLessThan(dist(first.c, pt(100, 100)));
   });
 });
+
+describe('directions and carried distances', () => {
+  it('half-line and extension: from their origin only', () => {
+    const r = only(build('halfLine', [pt(10, 10), pt(20, 10)]), 'segment');
+    expect(r.p1).toEqual(pt(10, 10));
+    expect(r.p2.x).toBeGreaterThan(50000);
+    const e = only(build('extension', [pt(0, 0), pt(10, 0)]), 'segment');
+    expect(e.p1).toEqual(pt(10, 0)); // starts at B, goes beyond
+    expect(e.p2.x).toBeGreaterThan(10);
+  });
+
+  it('azimuths: clockwise from the top of the sheet', () => {
+    const south = only(build('azimuthRay', [pt(0, 0), 180]), 'segment');
+    expect(south.p2.x).toBeCloseTo(0);
+    expect(south.p2.y).toBeGreaterThan(0); // down on screen
+    const east = only(build('azimuthRay', [pt(0, 0), 90]), 'segment');
+    expect(east.p2.x).toBeGreaterThan(0);
+    expect(east.p2.y).toBeCloseTo(0);
+    const ne = only(build('azimuthLine', [pt(0, 0), 45]), 'line');
+    expect(direction(ne).x).toBeCloseTo(Math.SQRT1_2);
+    expect(direction(ne).y).toBeCloseTo(-Math.SQRT1_2); // north-east: right and up
+  });
+
+  it('a distance carried along a line, in the chosen sense', () => {
+    const ref = { kind: 'line', ...style, p1: pt(-50000, 0), p2: pt(50000, 0) } as LineItem;
+    const s = shapes(build('carry', [ref, pt(100, 0), pt(50, 0), 30]));
+    expect(s.map((x) => x.kind)).toEqual(['segment', 'point']);
+    expect((s[1] as Extract<Shape, { kind: 'point' }>).p).toEqual(pt(70, 0)); // towards the side clicked
+  });
+
+  it('center of 3 points', () => {
+    expect(only(build('centroid', [pt(0, 0), pt(6, 0), pt(0, 9)]), 'point').p).toEqual(pt(2, 3));
+  });
+});

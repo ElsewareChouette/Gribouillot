@@ -10,6 +10,8 @@ import { Picture } from './images';
 import { download, exportProjectZip, importProject, isImageName, mimeOf, safeFileName, type ImportResult } from './io';
 import { emptyLayer, emptyProject, type Project } from './model';
 import { Renderer } from './render';
+import { toGeoJSON } from './geojson';
+import { organizeByEnigmas } from './enigmas';
 import * as store from './store';
 import { alertDialog, confirmDialog, openDialog, promptText } from './ui/dialogs';
 import { h, pickFiles } from './ui/dom';
@@ -125,6 +127,8 @@ export class Session {
   private async open(project: Project, fit: boolean): Promise<void> {
     const app = this.app;
     await this.closeProject(false);
+    // Work by énigmes by default: a project that never had them gets them (not one whose groups were removed).
+    if (project.groups === undefined) project.groups = organizeByEnigmas(project.layers);
     app.project = project;
     app.currentLayerId = project.layers[project.layers.length - 1]?.id ?? null;
     store.setLastProjectId(project.id);
@@ -193,7 +197,11 @@ export class Session {
     const p = emptyProject(name);
     p.mapFile = safeFileName(file.name);
     p.mapName = splitExt(file.name)[0];
-    p.layers = [emptyLayer('calque_1')];
+    // It starts at the first énigme.
+    const first = emptyLayer('530 constructions');
+    p.layers = [first];
+    p.groups = organizeByEnigmas(p.layers);
+    p.color = p.groups[0].color;
     await store.putFile(p.id, p.mapFile, file);
     await store.saveProject(p);
     void store.requestPersistence();
@@ -281,6 +289,23 @@ export class Session {
     app.status('Projet exporté. Décompressé, il s\'ouvre aussi dans Gribouillot pour ordinateur.');
   }
 
+  /** The figures in GPS coordinates, as GeoJSON (needs the calibration). */
+  async exportGeoJSON(): Promise<void> {
+    const app = this.app;
+    const p = app.project;
+    const g = app.georef();
+    if (!p) return;
+    if (!g) {
+      await alertDialog('Export GeoJSON', 'Calez d\'abord la carte (onglet « Carte ») : il faut connaître la position GPS des tracés.');
+      return;
+    }
+    const map = app.mapPicture();
+    const rect = map ? { x: 0, y: 0, w: map.w, h: map.h } : app.cam.visibleRect();
+    const data = toGeoJSON(app.shownLayers().filter((l) => l.visible), app.groups(), g, rect, (px) => app.formatLength(px));
+    download(new Blob([JSON.stringify(data)], { type: 'application/geo+json' }), `${safeFileName(p.name)}.geojson`);
+    app.status(`GeoJSON exporté (${(data as { features: unknown[] }).features.length} objets, calques visibles${app.untilRank !== null ? ', état à l\'énigme en cours' : ''}) : il s'ouvre dans QGIS, uMap, geojson.io…`);
+  }
+
   /** Export the current view, or the whole map, as a picture. */
   async exportImage(): Promise<void> {
     const app = this.app;
@@ -294,8 +319,15 @@ export class Session {
       map ? h('option', { value: '0.25' }, `Toute la carte, 25 % (${Math.round(map.w / 4)} × ${Math.round(map.h / 4)} px)`) : null,
     );
     const format = h('select', {}, h('option', { value: 'image/png' }, 'PNG'), h('option', { value: 'image/jpeg' }, 'JPEG (plus léger)'));
+    const legend = h('input', { type: 'checkbox', checked: true });
+    const groups = app.groups();
+    const state = app.untilRank !== null && groups[app.untilRank]
+      ? `État à l'énigme ${groups[app.untilRank].code} : les énigmes suivantes ne sont pas dessinées.`
+      : groups.length ? 'Toutes les énigmes (cochez « état à cette énigme » en haut pour n\'exporter que l\'état à une énigme).' : '';
     const ok = await openDialog('Exporter une image', h('div', { class: 'options' },
-      h('label', {}, 'Contenu', what), h('label', {}, 'Format', format)), [
+      h('label', {}, 'Contenu', what), h('label', {}, 'Format', format),
+      h('label', { class: 'check' }, legend, 'Légende, échelle et nord'),
+      state ? h('p', { class: 'hint' }, state) : null), [
       { label: 'Annuler', value: false },
       { label: 'Exporter', value: true, primary: true },
     ]);
@@ -313,12 +345,76 @@ export class Session {
       app.status('Rendu de l\'image…');
       canvas = this.renderOffscreen(w, hh, k, 0, 0, 1);
     }
+    if (legend.checked) this.drawLegend(canvas, what.value === 'view' ? cam.zoom : parseFloat(what.value), what.value === 'view' ? window.devicePixelRatio || 1 : 1);
     const type = format.value;
     canvas.toBlob((blob) => {
       if (!blob) return void alertDialog('Export impossible', 'Le navigateur n\'a pas pu produire l\'image.');
       download(blob, `${safeFileName(p.name)}.${type === 'image/png' ? 'png' : 'jpg'}`);
       app.status('Image exportée.');
     }, type, 0.92);
+  }
+
+  /** The legend of an exported picture: the énigmes shown, a scale bar, the north. */
+  private drawLegend(canvas: HTMLCanvasElement, zoom: number, dpr: number): void {
+    const app = this.app;
+    const p = app.project!;
+    const x = canvas.getContext('2d')!;
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const groups = app.groups();
+    const until = app.untilRank ?? groups.length - 1;
+    const shown = groups.filter((g, i) => i <= until && g.layerIds.length);
+    const lines: { text: string; color?: string; bold?: boolean }[] = [{ text: p.name, bold: true }];
+    if (app.untilRank !== null && groups[app.untilRank]) lines.push({ text: `État à l'énigme ${groups[app.untilRank].code} (${app.untilRank + 1}/${groups.length})` });
+    for (const g of shown) lines.push({ text: `${g.code} — ${g.title}`, color: g.color });
+    const pad = 12, lh = 20, size = 14;
+    x.font = `${size}px system-ui, sans-serif`;
+    const width = Math.max(220, ...lines.map((l) => x.measureText(l.text).width + (l.color ? 26 : 0))) + pad * 2;
+    // A round length of the ground for the scale bar, about 150 px long.
+    const m = app.mPerPx();
+    let bar: { px: number; label: string } | null = null;
+    if (m) {
+      const target = (150 / zoom) * m;
+      const pow = Math.pow(10, Math.floor(Math.log10(target)));
+      const nice = [5, 2, 1].map((k) => k * pow).find((v) => v <= target) ?? pow;
+      bar = { px: (nice / m) * zoom, label: nice >= 1000 ? `${nice / 1000} km` : `${nice} m` };
+    }
+    const height = pad * 2 + lines.length * lh + (bar ? 34 : 0);
+    const W = canvas.width / dpr, H = canvas.height / dpr;
+    const left = 16, top = H - height - 16;
+    x.fillStyle = 'rgba(255,255,255,0.9)';
+    x.strokeStyle = '#888';
+    x.lineWidth = 1;
+    x.beginPath();
+    x.roundRect(left, top, width, height, 8);
+    x.fill();
+    x.stroke();
+    lines.forEach((l, i) => {
+      const y = top + pad + i * lh + 14;
+      if (l.color) {
+        x.fillStyle = l.color;
+        x.fillRect(left + pad, y - 10, 16, 10);
+      }
+      x.fillStyle = '#111';
+      x.font = `${l.bold ? 'bold ' : ''}${size}px system-ui, sans-serif`;
+      x.fillText(l.text, left + pad + (l.color ? 26 : 0), y);
+    });
+    if (bar) {
+      const y = top + pad + lines.length * lh + 10;
+      x.fillStyle = '#111';
+      x.fillRect(left + pad, y, bar.px, 6);
+      x.font = `${size - 2}px system-ui, sans-serif`;
+      x.fillText(bar.label, left + pad + bar.px + 8, y + 7);
+    }
+    // The north: the top of the sheet.
+    x.fillStyle = '#111';
+    x.font = 'bold 16px system-ui, sans-serif';
+    x.fillText('N', W - 32, 30);
+    x.beginPath();
+    x.moveTo(W - 26, 36);
+    x.lineTo(W - 32, 56);
+    x.lineTo(W - 20, 56);
+    x.closePath();
+    x.fill();
   }
 
   private renderOffscreen(w: number, hh: number, zoom: number, panX: number, panY: number, dpr: number): HTMLCanvasElement {
@@ -336,7 +432,7 @@ export class Session {
     r.clear('#ffffff', dpr);
     const map = app.mapPicture();
     if (map) r.map(map, app.options.gray && map.hasGray(), dpr);
-    r.layers(app.project!.layers, { selection: new Set(), showWeight: app.options.weights, pictures: app.pictures, dpr });
+    r.layers(app.shownLayers(), { selection: new Set(), showWeight: app.options.weights, showNames: app.options.showNames, pictures: app.pictures, dpr });
     return canvas;
   }
 }

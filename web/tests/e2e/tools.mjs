@@ -68,12 +68,21 @@ await page.waitForFunction(() => window.gribouillot.pictures.size > 0);
 // A fixed view, so that screen positions map to known scene positions.
 await A(() => {
   const a = window.gribouillot;
+  // The map as wide as when the snapshot was made (the panel was 320 px wide).
+  document.getElementById('panel').style.setProperty('--panel-w', '320px');
+  a.resize();
   a.setZoom(1);
   a.cam.panX = 0;
   a.cam.panY = 0;
   a.requestRender();
   a.setScale({ px: 1000, value: 127, unit: 'km' });
+  // A new project starts in the 530, in its color: the snapshot was drawn in black.
+  a.project.color = '#000000';
+  // The minimap covers the bottom right corner of the map, where the test clicks.
+  if (a.options.minimap) a.toggleOption('minimap');
 });
+const start = await A(() => ({ layer: window.gribouillot.currentLayer.name, rank: window.gribouillot.currentRank(), steps: document.querySelectorAll('.step').length }));
+if (start.layer !== '530 constructions' || start.rank !== 0 || start.steps !== 10) errors.push(`new project: not in the 530 (${JSON.stringify(start)})`);
 
 const box = await page.locator('#canvas').boundingBox();
 const move = (x, y) => page.mouse.move(box.x + x, box.y + y);
@@ -294,6 +303,7 @@ await step('undo x2 + redo', async () => {
 
 // Layer opacity and visibility are undoable, the slider is one undo step.
 const opacity = () => A(() => window.gribouillot.currentLayer.opacity);
+await page.getByRole('tab', { name: /Calques|Énigmes/ }).click();
 const slider = await page.locator('.layer-extra input[type=range]').boundingBox();
 await page.mouse.move(slider.x + slider.width - 2, slider.y + slider.height / 2);
 await page.mouse.down();
@@ -316,7 +326,7 @@ const round = (v) => (typeof v === 'number' ? Math.round(v * 1e4) / 1e4 + 0 : v)
 const clean = (v) => {
   if (Array.isArray(v)) return v.map(clean);
   if (v && typeof v === 'object') {
-    return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'id' && k !== 'link').sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, x]) => [k, clean(x)]));
+    return Object.fromEntries(Object.entries(v).filter(([k]) => k !== 'id' && k !== 'link' && k !== 'label').sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, x]) => [k, clean(x)]));
   }
   return round(v);
 };
@@ -361,8 +371,8 @@ await A(() => {
   a.setTool('select');
   a.setSelection([a.currentLayer.items.find((i) => i.kind === 'point').id]);
 });
-const panel = await page.locator('.gps-point').innerText().catch(() => '');
-if (!panel.includes('Point :') || !panel.includes('°')) errors.push(`gps: no position in the panel (« ${panel} »)`);
+const panel = await page.locator('.inspector').innerText().catch(() => '');
+if (!panel.includes('POSITION GPS') || !/\d+,\d+° N/.test(panel)) errors.push(`gps: no position in the object tab (« ${panel} »)`);
 await page.waitForTimeout(800); // autosave
 await page.reload();
 await page.waitForFunction(() => window.gribouillot.project);
@@ -459,6 +469,22 @@ const around = (await page.locator('dialog[open]').innerText()).split('\n').find
 const firstLink = await page.locator('dialog[open] .nearby-links a', { hasText: 'Google' }).first().getAttribute('href').catch(() => null);
 if (!/^[1-9]\d* monument/.test(around ?? '') || !firstLink?.startsWith('https://www.google.com/search?q=')) errors.push(`monuments: « ${around} », Google link ${firstLink}`);
 await page.locator('dialog[open] button.primary').click();
+
+// The command palette: a few letters and Enter.
+await page.locator('#canvas').focus();
+await key('Control+k');
+await page.keyboard.type('perpendic');
+await key('Enter');
+const picked = await A(() => window.gribouillot.toolId);
+if (picked !== 'perpendicular') errors.push(`palette: Ctrl+K « perpendic » gave the tool ${picked}`);
+
+// The énigmes: in the order of the game, a layer for the one opened.
+await key('Escape');
+await A(() => window.gribouillot.setSelection([]));
+await page.getByRole('tab', { name: /Calques|Énigmes/ }).click();
+await page.locator('.step', { hasText: '470' }).click();
+const enigma = await A(() => ({ layer: window.gribouillot.currentLayer.name, rank: window.gribouillot.currentRank(), steps: [...document.querySelectorAll('.step')].map((b) => b.textContent).join(' ') }));
+if (enigma.layer !== '470 constructions' || enigma.rank !== 2 || enigma.steps !== '530 780 470 580 600 500 420 560 650 520') errors.push(`énigmes: ${JSON.stringify(enigma)}`);
 await browser.close();
 
 if (errors.length) {
@@ -474,6 +500,9 @@ if (update || !existsSync(snapshotFile)) {
   const diff = [];
   for (let i = 0; i < Math.max(a.length, b.length) && diff.length < 40; i++) if (a[i] !== b[i]) diff.push(`line ${i + 1}:\n  expected ${a[i]}\n  got      ${b[i]}`);
   if (diff.length) {
+    // Which steps went wrong, before the details.
+    const exp = JSON.parse(readFileSync(snapshotFile, 'utf8')).steps;
+    result.steps.forEach((s, i) => JSON.stringify(s) !== JSON.stringify(exp[i]) && console.error(`step « ${s.name} »: expected ${JSON.stringify(exp[i])}, got ${JSON.stringify(s)}`));
     console.error(`tools differ from the snapshot:\n${diff.join('\n')}`);
     process.exit(1);
   }

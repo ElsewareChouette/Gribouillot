@@ -11,6 +11,8 @@ export interface KnownMap {
   name: string;
   w: number;
   h: number;
+  /** Nominal scale of the scan, meters of ground per pixel (the GPS calibration tells the real one). */
+  mPerPx: number;
   /** Name, position on the map (pixels), latitude and longitude of each anchor. */
   anchors: [string, number, number, number, number][];
 }
@@ -22,6 +24,7 @@ export const KNOWN_MAPS: KnownMap[] = [
     name: 'Michelin 989 (scan Zarquos)',
     w: 8460,
     h: 7570,
+    mPerPx: 127, // a 1:1 000 000 map scanned at 200 dpi; the calibration measures 128.5
     anchors: [
       ["Forbach", 7295.37, 1601.84, 49.1865, 6.8954],
       ["Rocamadour", 4263.58, 5463.44, 44.7994, 1.618],

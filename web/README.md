@@ -7,6 +7,20 @@ Les projets s'échangent avec la version pour ordinateur : on ouvre ici le **dos
 projet (ou un `.zip` de ce dossier), et « Exporter le projet (.zip) » produit l'arborescence
 de la version Qt (`<projet>.grib`, un `<calque>.xml` par calque, la carte et les images).
 
+## L'interface
+
+- **En haut** : les menus, le projet, le bandeau des énigmes (530 → 520, dans l'ordre du jeu),
+  annuler/rétablir et la recherche **Ctrl+K** : une commande, un outil, un calque ou un objet
+  par quelques lettres (« perp », « Dabo »).
+- **À gauche**, 7 outils : Sélection, Vue, Point, Droite, Cercle, Arc, Mesure. Leurs variantes
+  (13 droites, 7 cercles, report de distance…) sont dans la **barre d'options** au-dessus de
+  la carte, avec la couleur, l'épaisseur et les réglages utiles à l'outil.
+- **À droite** (400 px, réglable en glissant son bord), 3 onglets : **Énigmes** (ou Calques), **Objet** (tout sur la sélection : nom,
+  construction et chaîne de dépendances, mesures carte et terrain, azimuts, précision, position
+  GPS, alentours, annotation, style ; et pour plusieurs objets : triangle d'erreur, traversée des
+  zones) et **Carte** (fond, échelle, unités, nord, calage GPS).
+- Les nouveaux objets sont **nommés** (A, B…, d1, c1…) ; les noms des points s'affichent.
+
 ## Développement
 
 ```sh
@@ -45,13 +59,19 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 | `src/intersections.ts` | intersections, milieux, extrémités, centres : aimantation et commande [I] |
 | `src/monuments.ts` | monuments historiques (base Mérimée) autour d'un point ou le long d'une droite |
 | `src/links.ts` | constructions liées : un tracé est reconstruit quand ce dont il dépend bouge |
+| `src/units.ts` | longueurs en formules et en unités du jeu (mm, cm de carte ; m, km, mesures), azimuts et points cardinaux |
+| `src/names.ts` | noms des objets, construction en mots, dépendances |
+| `src/enigmas.ts` | les énigmes : groupes de calques dans l'ordre du jeu, règles (pas de référence vers une énigme suivante) |
+| `src/analysis.ts` | triangle d'erreur, traversée des zones |
+| `src/geojson.ts` | export des tracés en coordonnées GPS |
+| `src/calibrations.ts` | cartes connues (scan Zarquos de la 989) : calage et échelle par défaut |
 | `src/describe.ts` | texte de la barre d'état sur la sélection (longueurs, angles) |
 | `src/render.ts` | rendu Canvas (épaisseurs indépendantes du zoom) |
 | `src/images.ts` | images décodées + copies réduites pour les très grandes cartes |
 | `src/legacy.ts` | lecture/écriture `.grib` (INI QSettings, couleurs `@Variant`) et `.xml` |
 | `src/io.ts` | import d'un dossier / `.zip`, export `.zip` |
 | `src/store.ts` | sauvegarde automatique dans IndexedDB |
-| `src/ui/` | menus, barre d'outils, panneau, boîtes de dialogue |
+| `src/ui/` | barre du haut et rail d'outils (`shell`, `toolbox`), panneau (`panel`, `inspector`), commandes et Ctrl+K (`commands`), boîtes de dialogue |
 
 ## Différences avec la version bureau
 
@@ -128,3 +148,29 @@ pas, il suit ses éléments. Changer l'angle d'un arc à la main ([A]) le détac
 Ces liens et les identifiants des éléments sont écrits dans les `.xml`, en attributs `wid` et
 `link` que la version bureau ne lit pas (elle les perd si elle réenregistre le calque : les
 tracés restent, sans lien).
+
+## Énigmes, unités, analyse
+
+**Énigmes.** On travaille par énigmes par défaut : un nouveau projet commence dans la 530, et
+un projet qui n'en a jamais eu (venu de la version bureau) est rangé par énigmes à
+l'ouverture, ses calques « 500 … » dans la 500, les autres hors énigme. Un groupe de calques par énigme (530,
+780, 470, 580, 600, 500, 420, 560, 650, 520), avec sa couleur (celle des nouveaux tracés), le
+texte de l'énigme et « ce que j'en retiens ». Un clic sur une énigme du bandeau y fait
+travailler ; *état à cette énigme* masque les suivantes. En dessinant dans une énigme, on ne
+s'accroche pas aux objets des énigmes suivantes. L'ordre se change (↑ ↓). Les groupes sont dans
+le `.web.json` ; la version bureau voit des calques ordinaires (« 500 constructions »).
+
+**Unités.** Les tracés se font sur la feuille, à l'échelle de la carte (1 px = 127 m pour le
+scan Zarquos) ; le calage GPS donne la distance sur le terrain (géodésique, GRS80), affichée à
+côté avec l'écart (+1,2 % sur ce scan). Les longueurs se saisissent en formules : `560606
+mesures`, `18,5 cm`, `86164/46241860 * 300000 km` (mm et cm sur la carte ; m, km et mesures
+sur le terrain), et la formule reste dans la construction. Les directions : azimut, point
+cardinal (`sud-ouest`), cap (`N 30° E`), depuis le haut de la feuille ou le méridien local
+(onglet Carte). Une longueur proche ou sous la précision de lecture (± 0,3 mm) est signalée.
+
+**Analyse.** Plusieurs droites sélectionnées : leur triangle d'erreur, sa taille et son centre,
+traçables (liés). Une droite et des cercles : quelles zones elle traverse, de combien. Chaque
+objet peut porter une annotation (citation, madit, doute).
+
+**Exports.** Image (vue ou carte entière) avec légende des énigmes, échelle et nord, dans l'état
+affiché ; GeoJSON des tracés en coordonnées GPS (QGIS, uMap, geojson.io).

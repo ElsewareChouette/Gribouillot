@@ -299,3 +299,44 @@ export function parseLatLon(text: string): LatLon | null {
   if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
   return { lat, lon };
 }
+
+/** Kilometers between 2 positions along the ellipsoid (Vincenty, GRS80): the distance on the ground. */
+export function geodesicKm(p: LatLon, q: LatLon): number {
+  const a = 6378137, f = 1 / 298.257222101, b = a * (1 - f);
+  const rad = Math.PI / 180;
+  const L = (q.lon - p.lon) * rad;
+  const U1 = Math.atan((1 - f) * Math.tan(p.lat * rad)), U2 = Math.atan((1 - f) * Math.tan(q.lat * rad));
+  const sinU1 = Math.sin(U1), cosU1 = Math.cos(U1), sinU2 = Math.sin(U2), cosU2 = Math.cos(U2);
+  let lambda = L, sinSigma = 0, cosSigma = 1, sigma = 0, cos2Alpha = 1, cos2SigmaM = 0;
+  for (let i = 0; i < 200; i++) {
+    const sinL = Math.sin(lambda), cosL = Math.cos(lambda);
+    sinSigma = Math.hypot(cosU2 * sinL, cosU1 * sinU2 - sinU1 * cosU2 * cosL);
+    if (sinSigma === 0) return 0;
+    cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosL;
+    sigma = Math.atan2(sinSigma, cosSigma);
+    const sinAlpha = (cosU1 * cosU2 * sinL) / sinSigma;
+    cos2Alpha = 1 - sinAlpha * sinAlpha;
+    cos2SigmaM = cos2Alpha ? cosSigma - (2 * sinU1 * sinU2) / cos2Alpha : 0;
+    const C = (f / 16) * cos2Alpha * (4 + f * (4 - 3 * cos2Alpha));
+    const prev = lambda;
+    lambda = L + (1 - C) * f * sinAlpha * (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)));
+    if (Math.abs(lambda - prev) < 1e-12) break;
+  }
+  const u2 = (cos2Alpha * (a * a - b * b)) / (b * b);
+  const A = 1 + (u2 / 16384) * (4096 + u2 * (-768 + u2 * (320 - 175 * u2)));
+  const B = (u2 / 1024) * (256 + u2 * (-128 + u2 * (74 - 47 * u2)));
+  const dSigma = B * sinSigma * (cos2SigmaM + (B / 4) * (cosSigma * (-1 + 2 * cos2SigmaM * cos2SigmaM)
+    - (B / 6) * cos2SigmaM * (-3 + 4 * sinSigma * sinSigma) * (-3 + 4 * cos2SigmaM * cos2SigmaM)));
+  return (b * A * (sigma - dSigma)) / 1000;
+}
+
+/**
+ * Direction of the geographic north on the map at a position: the angle, in
+ * degrees clockwise, from the top of the sheet to the local meridian.
+ */
+export function meridianAngle(g: Georef, p: Pt): number {
+  const ll = g.toLatLon(p);
+  const n = g.toPx({ lat: ll.lat + 0.05, lon: ll.lon });
+  const s = g.toPx({ lat: ll.lat - 0.05, lon: ll.lon });
+  return (Math.atan2(n.x - s.x, s.y - n.y) * 180) / Math.PI;
+}

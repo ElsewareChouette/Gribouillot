@@ -13,6 +13,8 @@ import type { Item, Source, StrokeItem } from '../model';
 import type { Renderer, StrokeStyle } from '../render';
 import { ArcSpanTracker } from '../shapes';
 import { alertDialog, promptNumber } from '../ui/dialogs';
+import { promptAzimuth, promptLength } from '../ui/length';
+import { meridianAngle } from '../geo';
 import { fmt } from '../ui/dom';
 import { Tool, previewStyle, type ToolEvent } from './base';
 import type { ToolId } from './index';
@@ -23,8 +25,10 @@ export class ConstructionTool extends Tool {
   /** Where each input comes from, so that the figure can follow it (links.ts). */
   private sources: Source[] = [];
   private tracker = new ArcSpanTracker();
-  /** Last length typed, proposed again next time (in the unit of the map). */
-  private lastLength: number | null = null;
+  /** Last length typed, proposed again next time (as typed). */
+  private lastLength: string | null = null;
+  /** A warning about the last length: under the precision of the map. */
+  private belowPrecision = '';
   /** Changes at each new figure: a pending dialog of an older one is ignored. */
   private round = 0;
 
@@ -85,6 +89,7 @@ export class ConstructionTool extends Tool {
     if (!step) return this.finish(app);
     if (step.take === 'angle') this.tracker = new ArcSpanTracker();
     if (step.take === 'length') void this.askLength(app, step);
+    else if (step.take === 'azimuth') void this.askAzimuth(app, step);
     else app.status(step.tip);
   }
 
@@ -105,6 +110,8 @@ export class ConstructionTool extends Tool {
     // Layers stay independent: a replaced item is only removed from the current layer.
     const remove = (res.remove ?? []).filter((i) => app.inCurrentLayer(i.id)).map((i) => i.id);
     app.addShapes(res.shapes, r.label, { center: res.center, remove, link: { recipe: r.id, sources } });
+    if (this.belowPrecision) app.status(`Attention : ${this.belowPrecision}`);
+    this.belowPrecision = '';
   }
 
   click(app: App, e: ToolEvent): void {
@@ -182,21 +189,50 @@ export class ConstructionTool extends Tool {
     return true;
   }
 
-  private async askLength(app: App, step: Extract<Step, { take: 'length' }>): Promise<void> {
+  /** Last direction typed. */
+  private lastAzimuth = 'S';
+
+  private async askAzimuth(app: App, step: Extract<Step, { take: 'azimuth' }>): Promise<void> {
     const round = this.round;
-    const k = app.unitPerPx();
-    const unit = k ? app.project!.scale.unit : 'px';
-    const units = { scaled: k > 0, len: (px: number) => `${fmt(px * (k || 1), 2)} ${unit}` };
-    const initial = step.initial ? Math.round(step.initial(this.inputs) * (k || 1) * 100) / 100 : (this.lastLength ?? 1);
-    const v = await promptNumber(step.title, step.label, initial, { min: 0, unit, hint: step.hint?.(this.inputs, units) });
+    const g = app.georef();
+    const geographic = app.units().north === 'meridian' && !!g;
+    const north = geographic ? 'le nord géographique (méridien local)' : 'le haut de la feuille';
+    const r = await promptAzimuth(step.title, step.label, this.lastAzimuth, north);
     if (round !== this.round) return;
-    if (v === null || v <= 0) {
+    if (!r) {
       this.start(app);
       return;
     }
-    if (!step.initial) this.lastLength = v;
-    this.inputs.push(k ? v / k : v);
-    this.sources.push({ k: 'num', v: k ? v / k : v });
+    this.lastAzimuth = r.typed;
+    // The north of the meridian leans on a conic map: turned into the sheet's one, at the origin.
+    const origin = [...this.inputs].reverse().find(isPt);
+    const sheet = geographic && origin ? (r.az + meridianAngle(g!, origin) + 360) % 360 : r.az;
+    this.inputs.push(sheet);
+    this.sources.push({ k: 'num', v: sheet, expr: `${r.typed} (${geographic ? 'nord géographique' : 'nord de la feuille'})` });
+    this.next(app);
+  }
+
+  private async askLength(app: App, step: Extract<Step, { take: 'length' }>): Promise<void> {
+    const round = this.round;
+    const c = app.lengthContext();
+    const k = app.unitPerPx();
+    const units = { scaled: k > 0, len: (px: number) => app.sheetText(px) };
+    const initial = step.initial ? String(Math.round(step.initial(this.inputs) * (k || 1) * 100) / 100).replace('.', ',') : (this.lastLength ?? '1');
+    const r = await promptLength(step.title, step.label, initial, c, step.hint?.(this.inputs, units));
+    if (round !== this.round) return;
+    if (!r) {
+      this.start(app);
+      return;
+    }
+    if (!step.initial) this.lastLength = r.expr ?? String(Math.round(r.px * (k || 1) * 1e6) / 1e6).replace('.', ',');
+    this.inputs.push(r.px);
+    this.sources.push({ k: 'num', v: r.px, ...(r.expr ? { expr: r.expr } : {}) });
+    // Below the precision of the map: done, but said.
+    const mm = c.mPerPx ? ((r.px * c.mPerPx) / c.units.paper) * 1000 : Infinity;
+    const p = c.units.precisionMm;
+    this.belowPrecision = mm < p
+      ? `${fmt(mm, 3)} mm sur la carte : c'est sous la précision de la carte (± ${fmt(p, 1)} mm), illisible sur cette carte — à refaire sur une carte plus précise.`
+      : mm < 10 * p ? `${fmt(mm, 2)} mm sur la carte : c'est au niveau de la précision de la carte (± ${fmt(p, 1)} mm).` : '';
     this.next(app);
   }
 
