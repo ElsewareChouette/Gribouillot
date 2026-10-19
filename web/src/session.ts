@@ -235,7 +235,7 @@ export class Session {
   }
 
   async pickProjectFiles(): Promise<void> {
-    const files = await pickFiles({ multiple: true, accept: '.zip,.gribz,.grib,.xml,image/*' });
+    const files = await pickFiles({ multiple: true, accept: '.zip,.gribz,.grib,.xml,.json,image/*' });
     if (files.length) await this.handleFiles(files.map((f) => ({ path: f.webkitRelativePath || f.name, blob: f })));
   }
 

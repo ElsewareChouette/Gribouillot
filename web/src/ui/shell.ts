@@ -8,7 +8,9 @@ import { ZOOM_STEP } from '../camera';
 import { fromFileList } from '../io';
 import { unitPerPx } from '../model';
 import * as store from '../store';
-import { CALIBRATE_DEF, TOOLS, type ToolDef } from '../tools';
+import { decimalLatLon, dmsLatLon, formatLatLon } from '../geo';
+import { townAt } from '../places';
+import { CALIBRATE_DEF, GEOREF_DEF, TOOLS, type ToolDef } from '../tools';
 import { alertDialog, confirmDialog, openDialog, popupMenu, styleDialog } from './dialogs';
 import { $, fmt, h } from './dom';
 import { icon } from './icons';
@@ -244,6 +246,7 @@ function refreshSidebar(app: App): void {
       ruler, px, h('span', {}, 'px ='), val, unit),
     h('p', { class: 'hint' }, metersPerPx ? `1 px = ${fmt(metersPerPx, metersPerPx < 10 ? 2 : 1)} m sur la carte` : 'Échelle non définie : les mesures sont en pixels.'),
   ));
+  sidebarBody.append(gpsSection(app));
 
   /* Layers */
   const list = h('ul', { class: 'layers' });
@@ -290,6 +293,62 @@ function refreshSidebar(app: App): void {
   const importBtn = h('button', { type: 'button', class: 'small', title: 'Importer un fichier de calque (.xml) de Gribouillot', onclick: () => void app.pickLayerFiles() }, 'Importer…');
   sidebarBody.append(section('Calques', list, h('div', { class: 'layer-actions' }, addBtn, importBtn),
     h('p', { class: 'hint' }, 'On dessine dans le calque surligné. Les éléments des autres calques servent de référence mais ne sont pas modifiables.')));
+}
+
+/* ================================================================= GPS */
+
+/** Commune names of the selected points, looked up once per position. */
+const townNames = new Map<string, string>();
+
+function gpsSection(app: App): HTMLElement {
+  const p = app.project!;
+  const anchors = p.anchors ?? [];
+  const g = app.georef();
+  const pin = iconButton(GEOREF_DEF.icon, 'Caler la carte : cliquez des villes de la carte et donnez leur nom', () => app.setTool(app.toolId === 'georef' ? 'select' : 'georef'));
+  pin.classList.toggle('active', app.toolId === 'georef');
+  const summary = app.georefSummary().replace(/^Calage GPS : /, '').replace(/ — transformation .*$/, '');
+  const content: (Node | null)[] = [h('div', { class: 'map-row' }, pin, h('span', { class: 'gps-summary' }, summary))];
+  if (!anchors.length) {
+    content.push(h('p', { class: 'hint' }, 'Placez au moins 3 villes bien réparties (mieux : 6 à 10, jusqu\'aux bords de la carte) pour connaître la position GPS de n\'importe quel point. La précision obtenue est affichée.'));
+  } else if (app.toolId === 'georef') {
+    const list = h('ul', { class: 'anchors' });
+    anchors.forEach((a, i) => {
+      const c = g?.checks[i];
+      list.append(h('li', {},
+        h('button', { type: 'button', class: 'link', title: 'Centrer la vue sur ce repère', onclick: () => { app.cam.centerOn(a.p); app.viewChanged(); } }, a.name),
+        h('span', { class: c && g?.max === c.km && anchors.length > 3 ? 'err worst' : 'err' }, c ? `${fmt(c.km, 1)} km` : ''),
+        h('button', { type: 'button', class: 'icon-btn', title: 'Retirer ce repère', onclick: () => app.setAnchors(anchors.filter((x) => x !== a)) }, '✕')));
+    });
+    content.push(list, h('p', { class: 'hint' }, 'En rouge sur la carte : où les autres repères placent chacun d\'eux. Un écart nettement plus grand que les autres trahit un repère mal placé.'));
+  }
+  const sel = app.selectedItems();
+  const it = sel.length === 1 ? sel[0].item : null;
+  const at = it?.kind === 'point' ? it.p : it?.kind === 'circle' || it?.kind === 'arc' ? it.c : null;
+  if (g && at) {
+    const ll = g.toLatLon(at);
+    const key = decimalLatLon(ll, 4);
+    const town = h('span', { class: 'hint' }, townNames.get(key) ?? '');
+    if (!townNames.has(key)) {
+      townNames.set(key, '');
+      townAt(ll).then((t) => {
+        townNames.set(key, t ? `${t.name} (${t.dept})` : 'hors de France');
+        town.textContent = townNames.get(key)!;
+      }, () => townNames.delete(key));
+    }
+    const copy = h('button', { type: 'button', class: 'small', title: 'Copier les coordonnées décimales', onclick: () => {
+      void navigator.clipboard?.writeText(decimalLatLon(ll)).then(() => app.status(`Copié : ${decimalLatLon(ll)}`));
+    } }, 'Copier');
+    const link = (label: string, url: string) => h('a', { class: 'small-link', href: url, target: '_blank', rel: 'noopener' }, label);
+    content.push(h('div', { class: 'gps-point' },
+      h('div', {}, h('b', {}, it!.kind === 'point' ? 'Point : ' : 'Centre : '), formatLatLon(ll)),
+      h('div', { class: 'hint' }, dmsLatLon(ll)),
+      town,
+      h('div', { class: 'map-row' }, copy,
+        link('Géoportail', `https://www.geoportail.gouv.fr/carte?c=${ll.lon.toFixed(5)},${ll.lat.toFixed(5)}&z=14&l0=GEOGRAPHICALGRIDSYSTEMS.MAPS::GEOPORTAIL:OGC:WMTS(1)&permalink=yes`),
+        link('OpenStreetMap', `https://www.openstreetmap.org/?mlat=${ll.lat.toFixed(5)}&mlon=${ll.lon.toFixed(5)}#map=14/${ll.lat.toFixed(5)}/${ll.lon.toFixed(5)}`)),
+      h('p', { class: 'hint' }, g.rms !== null ? `À ± ${fmt(Math.max(g.rms, 0.1), 1)} km environ, d'après les repères.` : 'Précision inconnue avec 2 repères.')));
+  }
+  return section('Position GPS', ...content);
 }
 
 /** Set right after a reorder drag, so that it does not count as a click. */

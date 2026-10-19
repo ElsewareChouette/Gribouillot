@@ -231,3 +231,20 @@ body.dropping #drop-overlay { display: grid; }
   #start { inset: 44px 0 0 0; }
   .start-card { padding: 18px; }
 }
+
+/* GPS */
+.gps-summary { font-size: 12px; line-height: 1.35; flex: 1; min-width: 0; }
+ul.anchors { list-style: none; margin: 8px 0 0; padding: 0; max-height: 180px; overflow-y: auto; }
+ul.anchors li { display: flex; align-items: center; gap: 6px; padding: 1px 0; font-size: 13px; }
+ul.anchors .link { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ul.anchors .err { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+ul.anchors .err.worst { color: #d00000; font-weight: 600; }
+.gps-point { margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; display: flex; flex-direction: column; gap: 3px; }
+.gps-point .hint { margin: 0; }
+.small-link { font-size: 12px; }
+.place-dlg label { display: block; margin-top: 10px; }
+.place-dlg input[type=text], .place-dlg input[type=search] { width: 100%; box-sizing: border-box; }
+.place-dlg .row input[type=search] { flex: 1; }
+ul.place-results { list-style: none; margin: 6px 0 0; padding: 0; max-height: 200px; overflow-y: auto; }
+ul.place-results li { padding: 2px 0; }
+ul.place-results .link { text-align: left; }

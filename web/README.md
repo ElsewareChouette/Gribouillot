@@ -40,6 +40,8 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 | `src/app.ts` | état de l'application, commandes d'édition, annuler/rétablir |
 | `src/input.ts` | souris, tactile, clavier |
 | `src/session.ts` | ouverture, sauvegarde automatique, import / export d'un projet |
+| `src/geo.ts` | calage GPS : Lambert-93, ajustement sur les repères, précision mesurée, lecture des coordonnées |
+| `src/places.ts` | recherche de communes (geo.api.gouv.fr, demande internet) |
 | `src/describe.ts` | texte de la barre d'état sur la sélection (longueurs, angles) |
 | `src/render.ts` | rendu Canvas (épaisseurs indépendantes du zoom) |
 | `src/images.ts` | images décodées + copies réduites pour les très grandes cartes |
@@ -60,4 +62,25 @@ En plus des fonctions de la 2.2 :
 - échelle mesurée sur la carte puis saisie de la distance réelle en une étape ;
 - export d'image de la carte entière en pleine résolution (pas seulement la vue) ;
 - rayon/somme des distances en pixels quand l'échelle n'est pas définie ;
-- le GPS (code mort dans la version bureau) n'est pas repris.
+- position GPS de n'importe quel point (voir ci-dessous).
+
+## Position GPS
+
+Panneau *Position GPS* : on clique des villes de la carte et on donne leur nom (recherche
+de la commune sur geo.api.gouv.fr, position de sa mairie) ou leurs coordonnées. À partir de
+2 repères, la barre d'état affiche la latitude et la longitude du curseur, et le panneau
+celles du point ou du centre de cercle sélectionné (copie, liens Géoportail et
+OpenStreetMap, nom de la commune).
+
+La carte est ajustée sur le Lambert-93 (similitude, affine ou polynomiale de degré 2 : la plus
+simple qui ne soit pas nettement moins bonne). La précision affichée est mesurée : chaque
+repère est replacé par les autres, et son écart (trait rouge sur la carte) dit à quoi s'en
+tenir pour un point quelconque. Un repère nettement plus loin que les autres est presque
+toujours une erreur d'identification.
+
+Sur le scan de la Michelin 989 de Zarquos (`tests/fixtures/zarquos-989.json`, 42 communes
+visées au centre de leur rond) : écart type 0,4 km, au pire 1,1 km ; avec 10 communes
+seulement, 0,6 km sur les 32 autres. Ce scan fait 128,5 m par pixel, pas 127.
+
+Les repères sont exportés à côté du `.grib`, dans `<projet>.web.json`, que la version bureau
+ignore.

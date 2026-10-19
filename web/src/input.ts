@@ -71,7 +71,7 @@ export class Input {
   private toolEvent(screen: Pt, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): ToolEvent {
     const app = this.app;
     const raw = app.cam.toScene(screen);
-    const snaps = app.tool.draws || app.toolId === 'measure' || app.toolId === 'protractor' || app.toolId === 'calibrate';
+    const snaps = app.tool.draws || app.toolId === 'measure' || app.toolId === 'protractor' || app.toolId === 'calibrate' || app.toolId === 'georef';
     const snapped = snaps ? app.snapTarget(screen) : null;
     return { p: snapped ?? raw, raw, screen, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
   }
@@ -121,7 +121,9 @@ export class Input {
     if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, s);
     this.mouseScreen = s;
     const scene = app.cam.toScene(s);
-    this.coordsEl.textContent = `x ${fmt(scene.x, 0)} · y ${fmt(scene.y, 0)} px`;
+    const gps = app.gps(scene);
+    this.coordsEl.textContent = gps ?? `x ${fmt(scene.x, 0)} · y ${fmt(scene.y, 0)} px`;
+    this.coordsEl.title = gps ? `x ${fmt(scene.x, 0)} · y ${fmt(scene.y, 0)} px` : '';
     const d = this.drag;
     if (d?.kind === 'pinch') {
       if (this.pointers.size < 2) return;

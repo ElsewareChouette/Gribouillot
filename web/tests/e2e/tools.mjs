@@ -329,6 +329,42 @@ await page.waitForFunction(() => window.gribouillot.project && window.gribouillo
 const restored = clean(await items());
 if (zipName !== 'Test outils.zip') errors.push(`export: unexpected file name ${zipName}`);
 if (JSON.stringify(restored) !== JSON.stringify(result.items)) errors.push('reload: the restored items differ');
+
+// GPS: 4 anchors typed by hand (no network), then the position of a point.
+await A(() => {
+  const a = window.gribouillot;
+  a.setZoom(1);
+  a.cam.panX = 0;
+  a.cam.panY = 0;
+  a.requestRender();
+  a.setTool('georef');
+});
+// About 127 m per pixel around 48.4° N (the minimap covers the bottom right corner).
+const anchors = [[700, 900, 'A', '48.5, -1.0'], [1300, 900, 'B', '48.5, 0.03'], [700, 1100, 'C', '48.272, -1.0'], [1200, 1100, 'D', '48.272, -0.14']];
+for (const [x, y, name, coords] of anchors) {
+  await click(x, y);
+  await page.locator('dialog[open] input[type=text]').first().fill(name);
+  await page.locator('dialog[open] input[placeholder="45.12345, 1.23456"]').fill(coords);
+  await page.locator('dialog[open] button.primary').click();
+  await page.waitForTimeout(50);
+}
+await move(1000, 1000);
+const coordsText = await page.locator('#coords').innerText();
+const georefStatus = await status();
+if (!/^48,3\d+° N, 0,4\d+° O$/.test(coordsText)) errors.push(`gps: coordinates bar shows « ${coordsText} »`);
+if (!/4 repères, précision ≈ 0,\d km/.test(georefStatus)) errors.push(`gps: status « ${georefStatus} »`);
+await A(() => {
+  const a = window.gribouillot;
+  a.setTool('select');
+  a.setSelection([a.currentLayer.items.find((i) => i.kind === 'point').id]);
+});
+const panel = await page.locator('.gps-point').innerText().catch(() => '');
+if (!panel.includes('Point :') || !panel.includes('°')) errors.push(`gps: no position in the panel (« ${panel} »)`);
+await page.waitForTimeout(800); // autosave
+await page.reload();
+await page.waitForFunction(() => window.gribouillot.project);
+const kept = await A(() => window.gribouillot.project.anchors?.map((a) => a.name).join(''));
+if (kept !== 'ABCD') errors.push(`gps: anchors after reload: ${kept}`);
 await browser.close();
 
 if (errors.length) {

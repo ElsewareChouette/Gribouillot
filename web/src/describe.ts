@@ -3,25 +3,32 @@
  * distances (port of the desktop sceneSelectionChanged).
  */
 
-import { angleTo, dist, distToLine, seg } from './geom';
+import { angleTo, dist, distToLine, seg, type Pt } from './geom';
 import type { Item } from './model';
 import { arcLength } from './shapes';
 import { fmt } from './ui/dom';
 
-/** `len` writes a length in pixels in the unit of the map. */
-export function describeSelection(sel: Item[], len: (px: number) => string): string {
+/**
+ * `len` writes a length in pixels in the unit of the map, `gps` a position
+ * in GPS coordinates (null when the map is not calibrated).
+ */
+export function describeSelection(sel: Item[], len: (px: number) => string, gps: (p: Pt) => string | null = () => null): string {
   if (sel.length === 0) return '';
+  const gpsOf = (p: Pt, what = 'GPS') => {
+    const g = gps(p);
+    return g ? ` — ${what} ${g}` : '';
+  };
   if (sel.length === 1) {
     const it = sel[0];
     switch (it.kind) {
       case 'point':
-        return `Point (${fmt(it.p.x, 1)} ; ${fmt(it.p.y, 1)})${it.weight ? `, poids ${it.weight}` : ''} — [W] : changer le poids`;
+        return `Point (${fmt(it.p.x, 1)} ; ${fmt(it.p.y, 1)})${gpsOf(it.p)}${it.weight ? `, poids ${it.weight}` : ''} — [W] : changer le poids`;
       case 'segment':
         return `Segment de longueur ${len(dist(it.p1, it.p2))}`;
       case 'line':
         return 'Droite infinie';
       case 'circle':
-        return `Cercle de rayon ${len(it.r)} — circonférence ${len(2 * Math.PI * it.r)}`;
+        return `Cercle de rayon ${len(it.r)} — circonférence ${len(2 * Math.PI * it.r)}${gpsOf(it.c, 'centre')}`;
       case 'arc':
         return `Arc de ${fmt(Math.abs(it.span), 1)}° — longueur ${len(arcLength(it))}, rayon ${len(it.r)} — [A] : changer l'angle`;
       case 'ellipse':

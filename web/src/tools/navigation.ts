@@ -3,7 +3,7 @@
  */
 
 import type { App } from '../app';
-import { angleOf, deg2rad, dist, mid, projectOnLine, samePt, seg, segLength, withLength, type Pt, type Seg } from '../geom';
+import { angleOf, deg2rad, dist, mid, projectOnLine, pt, samePt, seg, segLength, withLength, type Pt, type Seg } from '../geom';
 import type { LineItem, SegmentItem } from '../model';
 import type { Renderer } from '../render';
 import { ArcSpanTracker } from '../shapes';
@@ -173,5 +173,46 @@ export class ProtractorTool extends Tool {
     const start = angleOf(this.first);
     r.arc(c, len, start, this.tracker.span, { color: '#ffd400', width: 3 });
     r.text(c, `${fmt(Math.abs(this.tracker.span), 1)}°`, { dx: 10, dy: -10, size: 18, bold: true });
+  }
+}
+
+/* ------------------------------------------------------------- GPS */
+
+/** Click on the map the places whose coordinates are known. */
+export class GeorefTool extends Tool {
+  readonly id = 'georef';
+  draws = false;
+
+  start(app: App): void {
+    app.status(app.georefSummary(true));
+  }
+
+  click(app: App, e: ToolEvent): void {
+    const near = app.anchorAt(e.screen);
+    void app.placeAnchor(near ? near.p : e.p, near ?? undefined);
+  }
+
+  move(app: App, e: ToolEvent): void {
+    super.move(app, e);
+    const near = app.anchorAt(e.screen);
+    app.status(near ? `${near.name} — cliquez pour corriger ou retirer ce repère.` : app.georefSummary(true));
+  }
+
+  overlay(r: Renderer, app: App): void {
+    const anchors = app.project?.anchors ?? [];
+    const g = app.georef();
+    anchors.forEach((a, i) => {
+      // Where the other anchors place this one: the length of the red line is its error.
+      const check = g?.checks[i];
+      if (check) {
+        r.line(a.p, check.p, { color: '#d00000', width: 2 });
+        r.point(check.p, '#d00000', 5);
+      }
+      const s = 8 / app.cam.zoom;
+      r.line(pt(a.p.x - s, a.p.y), pt(a.p.x + s, a.p.y), { color: '#0050d0', width: 3 });
+      r.line(pt(a.p.x, a.p.y - s), pt(a.p.x, a.p.y + s), { color: '#0050d0', width: 3 });
+      const err = check ? ` (${fmt(check.km, check.km < 10 ? 1 : 0)} km)` : '';
+      r.text(a.p, `${a.name}${err}`, { color: '#0050d0', bold: true, dx: 10, dy: -8 });
+    });
   }
 }

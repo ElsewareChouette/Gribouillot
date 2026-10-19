@@ -9,7 +9,7 @@
 
 import { unzipSync, zipSync, type Zippable } from 'fflate';
 import { baseName, parseGrib, parseLayerXml, writeGrib, writeLayerXml } from './legacy';
-import { emptyProject, type Project } from './model';
+import { emptyProject, newId, type Project } from './model';
 
 export interface ImportResult {
   project: Project;
@@ -92,6 +92,9 @@ export async function importProject(input: NamedBlob[]): Promise<ImportResult | 
   project.width = data.width;
   project.customColors = data.customColors;
 
+  const extra = find(stem(baseName(grib.path)) + WEB_DATA_EXT);
+  if (extra) readWebData(project, await extra[1].text(), warnings);
+
   let missingMap: string | undefined;
   if (data.mapPath) {
     const m = find(baseName(data.mapPath));
@@ -121,6 +124,33 @@ export async function importProject(input: NamedBlob[]): Promise<ImportResult | 
   if (missingLayers.length) warnings.push(`Calque(s) introuvable(s) : ${missingLayers.join(', ')}`);
   if (missingPics.size) warnings.push(`Image(s) introuvable(s) : ${[...missingPics].join(', ')}`);
   return { project, files: projectFiles, warnings, missingMap };
+}
+
+/*
+ * What only the web version knows (the GPS anchors) goes to a side file,
+ * `<project>.web.json`, which the desktop version ignores.
+ */
+const WEB_DATA_EXT = '.web.json';
+
+function writeWebData(project: Project): string | null {
+  const anchors = project.anchors ?? [];
+  if (!anchors.length) return null;
+  return JSON.stringify({ format: 'gribouillot-web', version: 1, anchors: anchors.map(({ name, p, lat, lon }) => ({ name, x: p.x, y: p.y, lat, lon })) }, null, 1);
+}
+
+function readWebData(project: Project, text: string, warnings: string[]): void {
+  try {
+    const d = JSON.parse(text) as { anchors?: { name?: unknown; x: unknown; y: unknown; lat: unknown; lon: unknown }[] };
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    project.anchors = [];
+    for (const a of d.anchors ?? []) {
+      const x = num(a.x), y = num(a.y), lat = num(a.lat), lon = num(a.lon);
+      if (x === null || y === null || lat === null || lon === null) continue;
+      project.anchors.push({ id: newId('g'), name: typeof a.name === 'string' ? a.name : 'repère', p: { x, y }, lat, lon });
+    }
+  } catch {
+    warnings.push('Fichier des repères GPS illisible : calage ignoré.');
+  }
 }
 
 /** Layer files (.xml) found among the given files, to add them to a project. */
@@ -170,6 +200,8 @@ export async function exportProjectZip(project: Project, getFile: (name: string)
     layerNames,
   });
   entries[folder + safeFileName(project.name) + '.grib'] = [new TextEncoder().encode(grib), { level: 6 }];
+  const extra = writeWebData(project);
+  if (extra) entries[folder + safeFileName(project.name) + WEB_DATA_EXT] = [new TextEncoder().encode(extra), { level: 6 }];
   const fileNames = new Set<string>();
   if (project.mapFile) fileNames.add(project.mapFile);
   for (const l of project.layers) for (const it of l.items) if (it.kind === 'pixmap') fileNames.add(it.file);

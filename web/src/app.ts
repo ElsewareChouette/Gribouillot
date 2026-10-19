@@ -12,6 +12,7 @@ import { Camera } from './camera';
 import type { Shape } from './constructions';
 import { describeSelection } from './describe';
 import * as edits from './edits';
+import { fitGeoref, formatLatLon, MODEL_LABELS, type Anchor, type Georef } from './geo';
 import { pt, type Pt, type Rect } from './geom';
 import { History } from './history';
 import type { Picture } from './images';
@@ -37,6 +38,7 @@ import * as store from './store';
 import { toolDef, type Tool, type ToolId } from './tools';
 import { alertDialog, confirmDialog, openDialog, promptNumber, promptText, styleDialog } from './ui/dialogs';
 import { fmt, h, pickFiles } from './ui/dom';
+import { placeDialog } from './ui/place';
 
 export interface Hit {
   item: Item;
@@ -90,6 +92,7 @@ export class App {
   private readonly statusEl: HTMLElement;
   private dpr = 1;
   private renderQueued = false;
+  private georefCache: { anchors?: Anchor[]; g: Georef | null } = { g: null };
 
   constructor(canvas: HTMLCanvasElement, statusEl: HTMLElement, coordsEl: HTMLElement) {
     this.canvas = canvas;
@@ -277,10 +280,11 @@ export class App {
   private selectionChanged(): void {
     if (this.toolId === 'select') this.status(this.selectionStatus());
     this.requestRender();
+    this.onChange();
   }
 
   selectionStatus(): string {
-    return describeSelection(this.selectedItems().map((h) => h.item), (px) => this.formatLength(px));
+    return describeSelection(this.selectedItems().map((h) => h.item), (px) => this.formatLength(px), (p) => this.gps(p));
   }
 
   /* ============================================================ editing */
@@ -611,6 +615,60 @@ export class App {
       this.status(`Échelle définie : ${fmt(px, 2)} px = ${fmt(v, 3)} ${p.scale.unit}.`);
     }
     this.setTool('select');
+  }
+
+  /* ================================================================ GPS */
+
+  /** The map's calibration, null until 2 anchors are placed. */
+  georef(): Georef | null {
+    const anchors = this.project?.anchors;
+    if (this.georefCache.anchors !== anchors) this.georefCache = { anchors, g: fitGeoref(anchors ?? []) };
+    return this.georefCache.g;
+  }
+
+  /** GPS coordinates of a scene position, null if the map is not calibrated. */
+  gps(p: Pt): string | null {
+    const g = this.georef();
+    return g ? formatLatLon(g.toLatLon(p)) : null;
+  }
+
+  /** The anchor under a screen position. */
+  anchorAt(screen: Pt): Anchor | null {
+    let best: Anchor | null = null, bestD = 12;
+    for (const a of this.project?.anchors ?? []) {
+      const c = this.cam.toScreen(a.p);
+      const d = Math.hypot(c.x - screen.x, c.y - screen.y);
+      if (d < bestD) [best, bestD] = [a, d];
+    }
+    return best;
+  }
+
+  /** Where the calibration stands, for the status bar and the panel. */
+  georefSummary(tip = false): string {
+    const anchors = this.project?.anchors ?? [];
+    const g = this.georef();
+    const next = tip ? ' Cliquez une ville de la carte que vous savez situer.' : '';
+    if (!anchors.length) return `Calage GPS : aucun repère.${next}`;
+    if (!g) return `Calage GPS : 1 repère, il en faut au moins 2.${next}`;
+    if (g.rms === null) return `Calage GPS : ${anchors.length} repères, précision encore inconnue (ajoutez-en un ${anchors.length + 1}ᵉ).${next}`;
+    const worst = anchors[g.checks.findIndex((c) => c?.km === g.max)];
+    return `Calage GPS : ${anchors.length} repères, précision ≈ ${fmt(g.rms, 1)} km (pire : ${worst?.name ?? '?'}, ${fmt(g.max!, 1)} km) — transformation ${MODEL_LABELS[g.model]}.${tip ? ' Cliquez une autre ville, ou un repère pour le corriger.' : ''}`;
+  }
+
+  setAnchors(anchors: Anchor[]): void {
+    this.project!.anchors = anchors;
+    this.changed();
+  }
+
+  /** Name a place of the map (a new anchor), or correct or remove an anchor. */
+  async placeAnchor(p: Pt, existing?: Anchor): Promise<void> {
+    const prj = this.project!;
+    const r = await placeDialog(existing ? `Repère « ${existing.name} »` : 'Quel est ce lieu ?', existing ? { name: existing.name, ll: existing } : undefined);
+    if (!r || this.project !== prj) return;
+    const others = (prj.anchors ?? []).filter((a) => a !== existing);
+    if (r === 'delete') this.setAnchors(others);
+    else this.setAnchors([...others, { id: existing?.id ?? newId('g'), p, name: r.name || 'repère', lat: r.ll.lat, lon: r.ll.lon }]);
+    this.status(this.georefSummary(this.toolId === 'georef'));
   }
 
   async toggleGray(): Promise<void> {

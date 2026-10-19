@@ -6,6 +6,7 @@
  * the previous `layers` array around (see history.ts).
  */
 
+import type { Anchor } from './geo';
 import type { Pt } from './geom';
 
 export type ScaleUnit = 'km' | 'm';
@@ -111,6 +112,8 @@ export interface Project {
   width: number; // current drawing width
   customColors: string[];
   layers: Layer[];
+  /** Points of the map with known GPS coordinates (see geo.ts). */
+  anchors?: Anchor[];
   /** Zoom and center of the view, restored when reopening the project. */
   view?: { zoom: number; cx: number; cy: number };
 }
@@ -166,6 +169,7 @@ export function emptyProject(name: string): Project {
     width: 5,
     customColors: [],
     layers: [],
+    anchors: [],
   };
 }
 

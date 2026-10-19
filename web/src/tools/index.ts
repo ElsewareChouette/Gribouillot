@@ -5,13 +5,13 @@
 import { RECIPES, type Recipe } from '../constructions';
 import type { Tool } from './base';
 import { ConstructionTool } from './construction';
-import { CalibrateTool, MeasureTool, PanTool, ProtractorTool, SelectTool } from './navigation';
+import { CalibrateTool, GeorefTool, MeasureTool, PanTool, ProtractorTool, SelectTool } from './navigation';
 import { PointTool, SpiralTool } from './special';
 
 export { Tool, type ToolEvent } from './base';
 
 export type ToolId =
-  | 'select' | 'pan' | 'measure' | 'calibrate' | 'protractor'
+  | 'select' | 'pan' | 'measure' | 'calibrate' | 'georef' | 'protractor'
   | 'point' | 'spiral'
   | keyof typeof RECIPES;
 
@@ -55,6 +55,8 @@ export const TOOLS: ToolDef[] = [
 
 export const CALIBRATE_DEF: ToolDef = { id: 'calibrate', label: 'Mesurer l\'échelle sur la carte', icon: 'measure-tape-px.png', group: 'nav', make: () => new CalibrateTool() };
 
+export const GEOREF_DEF: ToolDef = { id: 'georef', label: 'Caler la carte (GPS)', icon: 'gps-on.png', group: 'nav', make: () => new GeorefTool() };
+
 export function toolDef(id: ToolId): ToolDef {
-  return TOOLS.find((t) => t.id === id) ?? CALIBRATE_DEF;
+  return TOOLS.find((t) => t.id === id) ?? (id === 'georef' ? GEOREF_DEF : CALIBRATE_DEF);
 }
