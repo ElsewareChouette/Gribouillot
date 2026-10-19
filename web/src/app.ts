@@ -1,24 +1,24 @@
 /**
- * The application: project state, user input, rendering loop and commands.
+ * The application: the open project, its selection and current tool, the
+ * rendering loop and the editing commands.
+ *
+ * Every change of the layers goes through `commit` (one undo step, then
+ * refresh and save); other changes of the project (scale, colors, names)
+ * through `changed` (refresh and save). Input handling lives in input.ts,
+ * the project's life (save, import, export) in session.ts.
  */
 
-import { Camera, ZOOM_STEP } from './camera';
-import { angleTo, dist, extendLine, mid, pt, seg, type Pt, type Rect } from './geom';
+import { Camera } from './camera';
+import type { Shape } from './constructions';
+import { describeSelection } from './describe';
+import * as edits from './edits';
+import { pt, type Pt, type Rect } from './geom';
 import { History } from './history';
-import { Picture } from './images';
-import {
-  exportProjectZip,
-  importLayers,
-  importProject,
-  isImageName,
-  mimeOf,
-  safeFileName,
-  download,
-  type ImportResult,
-} from './io';
+import type { Picture } from './images';
+import { Input } from './input';
+import { importLayers } from './io';
 import {
   emptyLayer,
-  emptyProject,
   formatLength,
   freshLayerName,
   isStroke,
@@ -27,17 +27,16 @@ import {
   type Item,
   type ItemKind,
   type Layer,
-  type LineItem,
   type PixmapItem,
   type Project,
 } from './model';
 import { HIGHLIGHT, Renderer } from './render';
-import { arcLength, itemDistance, itemTouchesRect, pickTolerance } from './shapes';
+import { Session } from './session';
+import { itemDistance, pickTolerance } from './shapes';
 import * as store from './store';
-import { TOOLS, toolDef, type Tool, type ToolEvent, type ToolId } from './tools';
-import { alertDialog, confirmDialog, openDialog, popupMenu, promptNumber, promptText, styleDialog } from './ui/dialogs';
+import { toolDef, type Tool, type ToolId } from './tools';
+import { alertDialog, confirmDialog, openDialog, promptNumber, promptText, styleDialog } from './ui/dialogs';
 import { fmt, h, pickFiles } from './ui/dom';
-import { icon } from './ui/icons';
 
 export interface Hit {
   item: Item;
@@ -53,7 +52,6 @@ export interface Options {
 }
 
 const OPTIONS_KEY = 'gribouillot.options';
-const DRAG_THRESHOLD = 5; // px
 
 function loadOptions(): Options {
   const def: Options = { drawCenter: false, weights: false, minimap: true, gray: false, spiral: { oneItem: true, showBase: false, centersOnly: true } };
@@ -65,18 +63,12 @@ function loadOptions(): Options {
   }
 }
 
-type Drag =
-  | { kind: 'pending'; start: Pt; last: Pt; button: number; pixmap?: PixmapItem; ctrl: boolean; shift: boolean }
-  | { kind: 'pan'; last: Pt }
-  | { kind: 'rubber'; start: Pt; end: Pt; additive: boolean }
-  | { kind: 'movePixmap'; id: string; startScene: Pt; orig: Pt; before: Layer[] }
-  | { kind: 'pinch'; dist: number; mid: Pt };
-
 export class App {
   project: Project | null = null;
   readonly cam = new Camera();
   readonly history = new History();
   readonly pictures = new Map<string, Picture>();
+  readonly session = new Session(this);
   selection = new Set<string>();
   currentLayerId: string | null = null;
   options: Options = loadOptions();
@@ -88,28 +80,24 @@ export class App {
   onChange: () => void = () => {};
   /** Called when the start screen must be shown or hidden. */
   onProjectOpen: (open: boolean) => void = () => {};
+  /** Hook for the minimap and the scale bar. */
+  afterRender?: () => void;
 
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly renderer: Renderer;
+  private readonly input: Input;
   private readonly statusEl: HTMLElement;
-  private readonly coordsEl: HTMLElement;
   private dpr = 1;
   private renderQueued = false;
-  private saveTimer: number | undefined;
-  private drag: Drag | null = null;
-  private pointers = new Map<number, Pt>();
-  private mouseScreen: Pt | null = null;
-  saving = false;
 
   constructor(canvas: HTMLCanvasElement, statusEl: HTMLElement, coordsEl: HTMLElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d')!;
     this.renderer = new Renderer(this.ctx, this.cam);
     this.statusEl = statusEl;
-    this.coordsEl = coordsEl;
     this.tool = toolDef('select').make();
-    this.bindInput();
+    this.input = new Input(this, canvas, coordsEl);
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement!);
     this.resize();
   }
@@ -133,13 +121,9 @@ export class App {
     }
   }
 
+  /** Identity and style of a new item. */
   stroke(): { id: string; color: string; width: number } {
     return { id: newId(), color: this.project!.color, width: this.project!.width };
-  }
-
-  lineThrough(a: Pt, b: Pt): LineItem | null {
-    const s = extendLine(a, b);
-    return s ? { kind: 'line', ...this.stroke(), p1: s.p1, p2: s.p2 } : null;
   }
 
   unitPerPx(): number {
@@ -154,7 +138,7 @@ export class App {
 
   /* ========================================================= rendering */
 
-  private resize(): void {
+  resize(): void {
     const parent = this.canvas.parentElement!;
     const r = parent.getBoundingClientRect();
     const center = this.project ? this.cam.center() : null;
@@ -178,7 +162,7 @@ export class App {
     });
   }
 
-  private mapPicture(): Picture | undefined {
+  mapPicture(): Picture | undefined {
     const f = this.project?.mapFile;
     return f ? this.pictures.get(f) : undefined;
   }
@@ -193,8 +177,9 @@ export class App {
     r.layers(p.layers, { selection: this.selection, showWeight: this.options.weights, pictures: this.pictures, dpr: this.dpr });
     this.tool.overlay(r, this);
     // Snap indicator on the point under the mouse.
-    if (this.mouseScreen && this.tool.draws) {
-      const s = this.snapTarget(this.mouseScreen);
+    const mouse = this.input.mouseScreen;
+    if (mouse && this.tool.draws) {
+      const s = this.snapTarget(mouse);
       if (s) {
         const c = this.cam.toScreen(s);
         this.ctx.beginPath();
@@ -205,12 +190,10 @@ export class App {
         this.ctx.stroke();
       }
     }
-    if (this.drag?.kind === 'rubber') r.rubberBand(normRect(this.drag.start, this.drag.end));
+    const band = this.input.rubberBand();
+    if (band) r.rubberBand(band);
     this.afterRender?.();
   }
-
-  /** Hook for the minimap and the scale bar. */
-  afterRender?: () => void;
 
   /* ========================================================== picking */
 
@@ -275,6 +258,11 @@ export class App {
     return l ? l.items.filter((i) => this.selection.has(i.id)) : [];
   }
 
+  selectedPixmap(): PixmapItem | null {
+    const sel = this.editableSelection();
+    return sel.length === 1 && sel[0].kind === 'pixmap' ? sel[0] : null;
+  }
+
   setSelection(ids: string[]): void {
     this.selection = new Set(ids);
     this.selectionChanged();
@@ -291,62 +279,13 @@ export class App {
     this.requestRender();
   }
 
-  /** Information about the selection for the status bar (port of sceneSelectionChanged). */
-  private selectionStatus(): string {
-    const sel = this.selectedItems().map((h) => h.item);
-    const L = (px: number) => this.formatLength(px);
-    if (sel.length === 0) return '';
-    if (sel.length === 1) {
-      const it = sel[0];
-      switch (it.kind) {
-        case 'point':
-          return `Point (${fmt(it.p.x, 1)} ; ${fmt(it.p.y, 1)})${it.weight ? `, poids ${it.weight}` : ''} — [W] : changer le poids`;
-        case 'segment':
-          return `Segment de longueur ${L(dist(it.p1, it.p2))}`;
-        case 'line':
-          return 'Droite infinie';
-        case 'circle':
-          return `Cercle de rayon ${L(it.r)} — circonférence ${L(2 * Math.PI * it.r)}`;
-        case 'arc':
-          return `Arc de ${fmt(Math.abs(it.span), 1)}° — longueur ${L(arcLength(it))}, rayon ${L(it.r)} — [A] : changer l'angle`;
-        case 'ellipse':
-          return `Ellipse : somme des distances aux foyers ${L(it.dSum)}, distance entre les foyers ${L(dist(it.f1, it.f2))}`;
-        case 'spiral':
-          return 'Spirale à 4 centres';
-        case 'pixmap':
-          return `Image ${it.file} — échelle ${fmt(it.scale, 3)}, rotation ${fmt(((it.rotation % 360) + 360) % 360, 1)}° — [←][→] tourner, [+][−] ou [Maj]+molette : échelle, [0][1][2] : pas`;
-      }
-    }
-    const lines = sel.filter((i) => i.kind === 'segment' || i.kind === 'line') as LineItem[];
-    const points = sel.filter((i) => i.kind === 'point');
-    const circles = sel.filter((i) => i.kind === 'circle');
-    if (sel.length === 2 && lines.length === 2) {
-      let a = angleTo(seg(lines[0].p1, lines[0].p2), seg(lines[1].p1, lines[1].p2));
-      if (a > 180) a = 360 - a;
-      if (Math.abs(a) < 1e-9 || Math.abs(a - 180) < 1e-9) return 'Les 2 droites sont strictement parallèles.';
-      if (Math.abs(a - 90) < 1e-9) return 'Les 2 droites sont strictement perpendiculaires.';
-      return `Angle entre les 2 droites : ${fmt(a, 2)}° / ${fmt(180 - a, 2)}°`;
-    }
-    if (sel.length === 2 && lines.length === 1 && points.length === 1) {
-      const p = (points[0] as { p: Pt }).p, l = lines[0];
-      const d = Math.abs((l.p2.y - l.p1.y) * p.x - (l.p2.x - l.p1.x) * p.y + l.p2.x * l.p1.y - l.p2.y * l.p1.x) / dist(l.p1, l.p2);
-      return `Distance orthogonale entre le point et la droite : ${L(d)}`;
-    }
-    if (sel.length === 2 && points.length === 2) {
-      const [a, b] = points.map((i) => (i as { p: Pt }).p);
-      return `Distance entre les 2 points : ${L(dist(a, b))}`;
-    }
-    if (sel.length === 2 && points.length === 1 && circles.length === 1) {
-      const p = (points[0] as { p: Pt }).p, c = circles[0] as { c: Pt; r: number };
-      const d = dist(p, c.c);
-      return `Distance du point au centre du cercle : ${L(d)} ; au cercle : ${L(d - c.r)}`;
-    }
-    return `${sel.length} éléments sélectionnés`;
+  selectionStatus(): string {
+    return describeSelection(this.selectedItems().map((h) => h.item), (px) => this.formatLength(px));
   }
 
   /* ============================================================ editing */
 
-  /** Replace the layers (an undoable change). */
+  /** Replace the layers: one undo step, then refresh and save. */
   commit(label: string, layers: Layer[], mergeKey?: string): void {
     const p = this.project!;
     this.history.push(label, p.layers, layers, mergeKey);
@@ -358,11 +297,18 @@ export class App {
   changed(): void {
     this.requestRender();
     this.onChange();
-    this.scheduleSave();
+    this.session.scheduleSave();
   }
 
-  private withLayer(layerId: string, f: (items: Item[]) => Item[]): Layer[] {
-    return this.project!.layers.map((l) => (l.id === layerId ? { ...l, items: f(l.items) } : l));
+  /** Show layers being edited (e.g. a picture being dragged) before they are committed. */
+  showLayers(layers: Layer[]): void {
+    this.project!.layers = layers;
+    this.requestRender();
+  }
+
+  /** The layers with some items of the current layer changed by f. */
+  updatedItems(ids: Iterable<string>, f: (item: Item) => Item): Layer[] {
+    return edits.updateItems(this.project!.layers, this.currentLayerId!, ids, f);
   }
 
   private requireLayer(): Layer | null {
@@ -384,12 +330,17 @@ export class App {
     if (!l || (items.length === 0 && removeIds.length === 0)) return;
     const all = [...items];
     if (center && this.options.drawCenter) all.push({ kind: 'point', ...this.stroke(), p: center, weight: 0 });
-    const rm = new Set(removeIds);
-    this.commit(label, this.withLayer(l.id, (its) => [...its.filter((i) => !rm.has(i.id)), ...all]));
-    for (const id of rm) this.selection.delete(id);
+    this.commit(label, edits.replaceItems(this.project!.layers, l.id, removeIds, all));
+    for (const id of removeIds) this.selection.delete(id);
   }
 
-  async addPoint(p: Pt, width?: number): Promise<void> {
+  /** Add the figures computed by a construction, in the current color and width. */
+  addShapes(shapes: Shape[], label: string, opts: { center?: Pt; remove?: string[]; width?: number } = {}): void {
+    const items = shapes.map((s) => ({ ...s, ...this.stroke(), ...(opts.width ? { width: opts.width } : {}) }) as Item);
+    this.replaceItems(opts.remove ?? [], items, label, opts.center);
+  }
+
+  async addPoint(p: Pt): Promise<void> {
     if (!this.requireLayer()) return;
     let weight = 0;
     if (this.options.weights) {
@@ -397,7 +348,7 @@ export class App {
       if (w === null) return;
       weight = Math.round(w);
     }
-    this.addItems([{ kind: 'point', ...this.stroke(), width: width ?? this.project!.width, p, weight }], 'point');
+    this.addShapes([{ kind: 'point', p, weight }], 'point');
   }
 
   undo(): void {
@@ -432,8 +383,8 @@ export class App {
   deleteSelection(): void {
     const items = this.editableSelection();
     if (!items.length) return this.cannot('supprimer');
-    const ids = new Set(items.map((i) => i.id));
-    this.commit('suppression', this.withLayer(this.currentLayerId!, (its) => its.filter((i) => !ids.has(i.id))));
+    const ids = items.map((i) => i.id);
+    this.commit('suppression', edits.replaceItems(this.project!.layers, this.currentLayerId!, ids, []));
     for (const id of ids) this.selection.delete(id);
     this.status(`${items.length} élément(s) supprimé(s).`);
   }
@@ -478,8 +429,7 @@ export class App {
   }
 
   private restyle(ids: string[], patch: { color?: string; width?: number }): void {
-    const set = new Set(ids);
-    this.commit('style', this.withLayer(this.currentLayerId!, (its) => its.map((i) => (set.has(i.id) && isStroke(i) ? { ...i, ...patch } as Item : i))));
+    this.commit('style', this.updatedItems(ids, (i) => (isStroke(i) ? ({ ...i, ...patch } as Item) : i)));
   }
 
   /** Space: select the next item of the current layer. */
@@ -496,16 +446,15 @@ export class App {
   updateItem(id: string, patch: Partial<Item>, label: string, mergeKey?: string): void {
     const hit = this.findItem(id);
     if (!hit) return;
-    this.commit(label, this.withLayer(hit.layer.id, (its) => its.map((i) => (i.id === id ? ({ ...i, ...patch } as Item) : i))), mergeKey);
+    this.commit(label, edits.updateItems(this.project!.layers, hit.layer.id, [id], (i) => ({ ...i, ...patch }) as Item), mergeKey);
   }
 
   async editPointWeight(): Promise<void> {
     const pts = this.editableSelection().filter((i) => i.kind === 'point');
     if (!pts.length) return this.cannot('pondérer');
-    const w = await promptNumber('Poids du point', 'Poids', pts[0].kind === 'point' ? pts[0].weight : 0, { integer: true, min: -999, max: 999 });
+    const w = await promptNumber('Poids du point', 'Poids', pts[0].weight, { integer: true, min: -999, max: 999 });
     if (w === null) return;
-    const ids = new Set(pts.map((p) => p.id));
-    this.commit('poids', this.withLayer(this.currentLayerId!, (its) => its.map((i) => (ids.has(i.id) && i.kind === 'point' ? { ...i, weight: Math.round(w) } : i))));
+    this.commit('poids', this.updatedItems(pts.map((p) => p.id), (i) => (i.kind === 'point' ? { ...i, weight: Math.round(w) } : i)));
     if (!this.options.weights) this.status('Astuce : activez « Pondération » pour afficher les poids.');
   }
 
@@ -514,47 +463,6 @@ export class App {
     if (!arc || arc.kind !== 'arc') return this.cannot('modifier');
     const a = await promptNumber('Angle de l\'arc', 'Angle (positif : sens anti-horaire)', arc.span, { unit: '°', min: -360, max: 360, hint: `soit ${fmt((arc.span * Math.PI) / 180, 4)} rad` });
     if (a !== null) this.updateItem(arc.id, { span: a }, 'angle de l\'arc');
-  }
-
-  /** Keyboard control of the selected picture (port of Item_pixmap::keyPressEvent). */
-  private pixmapStep = 1.0204;
-
-  private selectedPixmap(): PixmapItem | null {
-    const sel = this.editableSelection();
-    return sel.length === 1 && sel[0].kind === 'pixmap' ? sel[0] : null;
-  }
-
-  private pixmapKey(e: KeyboardEvent): boolean {
-    const px = this.selectedPixmap();
-    if (!px) return false;
-    const step = e.shiftKey ? 10 : 1;
-    switch (e.key) {
-      case 'ArrowLeft':
-        this.updateItem(px.id, { rotation: px.rotation - step }, 'rotation de l\'image', `rot-${px.id}`);
-        break;
-      case 'ArrowRight':
-        this.updateItem(px.id, { rotation: px.rotation + step }, 'rotation de l\'image', `rot-${px.id}`);
-        break;
-      case '+':
-        this.updateItem(px.id, { scale: px.scale * this.pixmapStep }, 'échelle de l\'image', `scale-${px.id}`);
-        break;
-      case '-':
-        this.updateItem(px.id, { scale: px.scale * (2 - this.pixmapStep) }, 'échelle de l\'image', `scale-${px.id}`);
-        break;
-      case '0':
-        this.pixmapStep = 1.0204;
-        break;
-      case '1':
-        this.pixmapStep = 1.005;
-        break;
-      case '2':
-        this.pixmapStep = 1.0005;
-        break;
-      default:
-        return false;
-    }
-    this.status(this.selectionStatus() + ` — pas d'échelle ${fmt((this.pixmapStep - 1) * 100, 2)} %`);
-    return true;
   }
 
   async addPicture(): Promise<void> {
@@ -566,8 +474,8 @@ export class App {
   async addPictureFile(file: File | Blob, name?: string): Promise<void> {
     const l = this.requireLayer();
     if (!l) return;
-    const fileName = await this.storeFile(name ?? (file as File).name ?? 'image.png', file);
-    const pic = await this.loadPicture(fileName, file, false);
+    const fileName = await this.session.storeFile(name ?? (file as File).name ?? 'image.png', file);
+    const pic = await this.session.loadPicture(fileName, file, false);
     if (!pic) return;
     const c = this.cam.center();
     const fit = Math.min(1, (this.cam.width / this.cam.zoom) * 0.6 / pic.w, (this.cam.height / this.cam.zoom) * 0.6 / pic.h);
@@ -575,35 +483,6 @@ export class App {
     this.addItems([item], 'image');
     this.setTool('select');
     this.setSelection([item.id]);
-  }
-
-  /** Store a file of the project, renaming it if another file has the same name. */
-  private async storeFile(name: string, blob: Blob): Promise<string> {
-    const p = this.project!;
-    const existing = await store.listFiles(p.id);
-    let fileName = safeFileName(name);
-    if (existing.includes(fileName)) {
-      const old = await store.getFile(p.id, fileName);
-      if (!old || old.size !== blob.size) {
-        const [stem, ext] = splitExt(fileName);
-        for (let i = 2; existing.includes(fileName); i++) fileName = `${stem}_${i}${ext}`;
-      }
-    }
-    await store.putFile(p.id, fileName, blob);
-    return fileName;
-  }
-
-  private async loadPicture(name: string, blob: Blob, mips = true): Promise<Picture | null> {
-    try {
-      const pic = await Picture.load(blob, mips);
-      this.pictures.get(name)?.close();
-      this.pictures.set(name, pic);
-      this.requestRender();
-      return pic;
-    } catch (e) {
-      await alertDialog('Image illisible', `Impossible de lire l'image « ${name} » : ${(e as Error).message ?? e}`);
-      return null;
-    }
   }
 
   async centerOfMass(): Promise<void> {
@@ -626,7 +505,7 @@ export class App {
       { label: 'Placer le point', value: true, primary: true },
     ]);
     if (!ok) return;
-    this.addItems([{ kind: 'point', ...this.stroke(), p: com, weight: 0 }], 'centre de masse');
+    this.addShapes([{ kind: 'point', p: com, weight: 0 }], 'centre de masse');
     this.cam.centerOn(com);
     this.requestRender();
   }
@@ -637,15 +516,13 @@ export class App {
     this.currentLayerId = id;
     this.tool.reset(this);
     this.onChange();
-    this.scheduleSave();
+    this.session.scheduleSave();
   }
 
   addLayer(): void {
     const p = this.project!;
     const layer = emptyLayer(freshLayerName(p.layers));
-    const idx = p.layers.findIndex((l) => l.id === this.currentLayerId);
-    const layers = [...p.layers];
-    layers.splice(idx < 0 ? layers.length : idx + 1, 0, layer);
+    const layers = edits.insertLayer(p.layers, layer, this.currentLayerId);
     this.currentLayerId = layer.id;
     this.commit('nouveau calque', layers);
   }
@@ -660,7 +537,7 @@ export class App {
       await alertDialog('Nom déjà utilisé', `Un autre calque s'appelle déjà « ${name} ».`);
       return;
     }
-    this.commit('renommer le calque', p.layers.map((x) => (x.id === id ? { ...x, name } : x)));
+    this.commit('renommer le calque', edits.patchLayer(p.layers, id, { name }));
   }
 
   async deleteLayer(id: string): Promise<void> {
@@ -669,32 +546,25 @@ export class App {
     if (!l) return;
     if (l.items.length && !(await confirmDialog('Supprimer le calque', `Supprimer le calque « ${l.name} » et ses ${l.items.length} élément(s) ? (Ctrl+Z pour annuler)`, 'Supprimer', true))) return;
     const idx = p.layers.indexOf(l);
-    const layers = p.layers.filter((x) => x.id !== id);
+    const layers = edits.removeLayer(p.layers, id);
     if (this.currentLayerId === id) this.currentLayerId = layers[Math.max(0, idx - 1)]?.id ?? null;
     this.commit('supprimer le calque', layers);
   }
 
   toggleLayerVisibility(id: string): void {
     const p = this.project!;
-    p.layers = p.layers.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l));
-    this.changed();
+    const l = p.layers.find((x) => x.id === id);
+    if (l) this.commit(l.visible ? 'masquer le calque' : 'afficher le calque', edits.patchLayer(p.layers, id, { visible: !l.visible }));
   }
 
   setLayerOpacity(id: string, opacity: number): void {
-    const p = this.project!;
-    p.layers = p.layers.map((l) => (l.id === id ? { ...l, opacity } : l));
-    this.requestRender();
-    this.scheduleSave();
+    // The moves of the slider make a single undo step.
+    this.commit('opacité du calque', edits.patchLayer(this.project!.layers, id, { opacity }), `opacity-${id}`);
   }
 
   moveLayer(id: string, toIndex: number): void {
-    const p = this.project!;
-    const from = p.layers.findIndex((l) => l.id === id);
-    if (from < 0 || from === toIndex) return;
-    const layers = [...p.layers];
-    const [l] = layers.splice(from, 1);
-    layers.splice(Math.max(0, Math.min(layers.length, toIndex)), 0, l);
-    this.commit('ordre des calques', layers);
+    const layers = edits.moveLayer(this.project!.layers, id, toIndex);
+    if (layers) this.commit('ordre des calques', layers);
   }
 
   async importLayerFiles(files: File[] | { path: string; blob: Blob }[]): Promise<void> {
@@ -707,13 +577,10 @@ export class App {
     }
     for (const [name, blob] of pics) {
       await store.putFile(p.id, name, blob);
-      await this.loadPicture(name, blob, false);
+      await this.session.loadPicture(name, blob, false);
     }
-    const added = layers.map(({ layer }) => {
-      let name = layer.name;
-      for (let i = 2; p.layers.some((l) => l.name === name); i++) name = `${layer.name}_${i}`;
-      return { ...layer, name };
-    });
+    const added: Layer[] = [];
+    for (const { layer } of layers) added.push({ ...layer, name: edits.uniqueLayerName([...p.layers, ...added], layer.name) });
     this.currentLayerId = added[added.length - 1].id;
     this.commit('import de calque', [...p.layers, ...added]);
     this.status(`${added.length} calque(s) importé(s).`);
@@ -762,21 +629,6 @@ export class App {
     this.changed();
   }
 
-  async changeMap(): Promise<void> {
-    const [file] = await pickFiles({ accept: 'image/*' });
-    if (file) await this.setMapFile(file.name, file);
-  }
-
-  private async setMapFile(name: string, blob: Blob): Promise<void> {
-    const p = this.project!;
-    const fileName = await this.storeFile(name, blob);
-    p.mapFile = fileName;
-    if (!p.mapName) p.mapName = splitExt(fileName)[0];
-    this.options.gray = false;
-    await this.loadMap(true);
-    this.changed();
-  }
-
   async renameMap(): Promise<void> {
     const p = this.project!;
     const n = await promptText('Nom de la carte', 'Nom affiché (le fichier n\'est pas renommé)', p.mapName || '');
@@ -786,21 +638,13 @@ export class App {
     }
   }
 
-  private async loadMap(fit: boolean): Promise<void> {
+  async renameProject(): Promise<void> {
     const p = this.project!;
-    this.cam.bounds = null;
-    if (!p.mapFile) return;
-    const blob = await store.getFile(p.id, p.mapFile);
-    if (!blob) {
-      this.status(`Carte « ${p.mapFile} » introuvable dans le navigateur.`);
-      return;
+    const n = await promptText('Renommer le projet', 'Nom du projet', p.name);
+    if (n) {
+      p.name = n;
+      this.changed();
     }
-    this.status('Chargement de la carte…');
-    const pic = await this.loadPicture(p.mapFile, blob, true);
-    if (!pic) return;
-    this.cam.bounds = { x: 0, y: 0, w: pic.w, h: pic.h };
-    if (fit) this.zoomToFit();
-    this.status('');
   }
 
   /* ============================================================== view */
@@ -831,17 +675,17 @@ export class App {
     this.viewChanged();
   }
 
-  private viewChanged(): void {
+  /** The view moved: redraw, and remember it with the project. */
+  viewChanged(): void {
     this.requestRender();
-    this.scheduleSave();
+    this.session.scheduleSave();
   }
 
   /* ============================================================= tools */
 
   setTool(id: ToolId): void {
     if (!this.project) return;
-    const def = toolDef(id);
-    const t = def.make();
+    const t = toolDef(id).make();
     if (t.draws && !this.currentLayer) {
       this.status('Créez ou choisissez d\'abord un calque.');
       return;
@@ -853,263 +697,6 @@ export class App {
     t.start(this);
     this.onChange();
     this.requestRender();
-  }
-
-  /* ============================================================ input */
-
-  private toolEvent(screen: Pt, e: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }): ToolEvent {
-    const raw = this.cam.toScene(screen);
-    const snapped = this.tool.draws || this.toolId === 'measure' || this.toolId === 'protractor' || this.toolId === 'calibrate' ? this.snapTarget(screen) : null;
-    return { p: snapped ?? raw, raw, screen, shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey };
-  }
-
-  private screenPos(e: { clientX: number; clientY: number }): Pt {
-    const r = this.canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  }
-
-  private bindInput(): void {
-    const c = this.canvas;
-    c.addEventListener('pointerdown', (e) => this.pointerDown(e));
-    c.addEventListener('pointermove', (e) => this.pointerMove(e));
-    c.addEventListener('pointerup', (e) => this.pointerUp(e));
-    c.addEventListener('pointercancel', (e) => {
-      this.pointers.delete(e.pointerId);
-      this.drag = null;
-      this.requestRender();
-    });
-    c.addEventListener('pointerleave', () => {
-      this.mouseScreen = null;
-      this.coordsEl.textContent = '';
-      this.requestRender();
-    });
-    c.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
-    c.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      void this.contextMenu(this.screenPos(e), e.clientX, e.clientY);
-    });
-    c.addEventListener('auxclick', (e) => e.button === 1 && e.preventDefault());
-    window.addEventListener('keydown', (e) => this.keyDown(e));
-  }
-
-  private pointerDown(e: PointerEvent): void {
-    if (!this.project) return;
-    const s = this.screenPos(e);
-    // Take the focus from any field of the panel, so that shortcuts work.
-    this.canvas.focus({ preventScroll: true });
-    this.canvas.setPointerCapture(e.pointerId);
-    this.pointers.set(e.pointerId, s);
-    if (this.pointers.size === 2) {
-      // Second finger: pinch-zoom and pan, cancel the pending click.
-      const [a, b] = [...this.pointers.values()];
-      this.drag = { kind: 'pinch', dist: dist(a, b), mid: mid(a, b) };
-      return;
-    }
-    if (this.pointers.size > 2) return;
-    if (e.button === 1 || (e.button === 0 && this.toolId === 'pan')) {
-      e.preventDefault();
-      this.drag = { kind: 'pan', last: s };
-      this.canvas.style.cursor = 'grabbing';
-      return;
-    }
-    if (e.button !== 0) return;
-    let pixmap: PixmapItem | undefined;
-    if (this.toolId === 'select') {
-      const hit = this.pick(s);
-      if (hit?.item.kind === 'pixmap' && hit.layer.id === this.currentLayerId) pixmap = hit.item;
-    }
-    this.drag = { kind: 'pending', start: s, last: s, button: e.button, pixmap, ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey };
-  }
-
-  private pointerMove(e: PointerEvent): void {
-    if (!this.project) return;
-    const s = this.screenPos(e);
-    if (this.pointers.has(e.pointerId)) this.pointers.set(e.pointerId, s);
-    this.mouseScreen = s;
-    const scene = this.cam.toScene(s);
-    this.coordsEl.textContent = `x ${fmt(scene.x, 0)} · y ${fmt(scene.y, 0)} px`;
-    const d = this.drag;
-    if (d?.kind === 'pinch') {
-      if (this.pointers.size < 2) return;
-      const [a, b] = [...this.pointers.values()];
-      const nd = dist(a, b), nm = mid(a, b);
-      if (d.dist > 0) this.cam.zoomBy(nd / d.dist, nm);
-      this.cam.panBy(nm.x - d.mid.x, nm.y - d.mid.y);
-      d.dist = nd;
-      d.mid = nm;
-      this.viewChanged();
-      return;
-    }
-    if (d?.kind === 'pending' && dist(s, d.start) > DRAG_THRESHOLD) {
-      if (this.toolId === 'select' && d.pixmap) {
-        this.setSelection([d.pixmap.id]);
-        this.drag = { kind: 'movePixmap', id: d.pixmap.id, startScene: this.cam.toScene(d.start), orig: pt(d.pixmap.x, d.pixmap.y), before: this.project.layers };
-      } else if (this.toolId === 'select') {
-        this.drag = { kind: 'rubber', start: d.start, end: s, additive: d.ctrl || d.shift };
-      } else {
-        this.drag = { kind: 'pan', last: d.start };
-        this.canvas.style.cursor = 'grabbing';
-      }
-    }
-    const d2 = this.drag;
-    if (d2?.kind === 'pan') {
-      this.cam.panBy(s.x - d2.last.x, s.y - d2.last.y);
-      d2.last = s;
-      this.viewChanged();
-      return;
-    }
-    if (d2?.kind === 'rubber') {
-      d2.end = s;
-      this.requestRender();
-      return;
-    }
-    if (d2?.kind === 'movePixmap') {
-      const delta = { x: scene.x - d2.startScene.x, y: scene.y - d2.startScene.y };
-      const p = this.project;
-      p.layers = p.layers.map((l) => (l.id !== this.currentLayerId ? l : {
-        ...l,
-        items: l.items.map((i) => (i.id === d2.id && i.kind === 'pixmap' ? { ...i, x: d2.orig.x + delta.x, y: d2.orig.y + delta.y } : i)),
-      }));
-      this.requestRender();
-      return;
-    }
-    this.tool.move(this, this.toolEvent(s, e));
-    this.requestRender();
-  }
-
-  private pointerUp(e: PointerEvent): void {
-    this.pointers.delete(e.pointerId);
-    const d = this.drag;
-    if (!this.project || !d) return;
-    if (d.kind === 'pinch') {
-      if (this.pointers.size === 0) this.drag = null;
-      return;
-    }
-    this.drag = null;
-    const s = this.screenPos(e);
-    this.canvas.style.cursor = this.tool.cursor;
-    switch (d.kind) {
-      case 'pending':
-        if (d.button === 0) {
-          this.tool.click(this, this.toolEvent(s, e));
-          this.tool.move(this, this.toolEvent(s, e));
-        }
-        break;
-      case 'rubber': {
-        const r = this.cam.toScene(d.start), q = this.cam.toScene(d.end);
-        const rect = normRect(r, q);
-        const ids: string[] = d.additive ? [...this.selection] : [];
-        for (const l of this.project.layers) {
-          if (!l.visible) continue;
-          for (const it of l.items) if (itemTouchesRect(it, rect, this.sizeOf) && !ids.includes(it.id)) ids.push(it.id);
-        }
-        this.setSelection(ids);
-        break;
-      }
-      case 'movePixmap': {
-        const after = this.project.layers;
-        this.project.layers = d.before;
-        if (after !== d.before) this.commit('déplacer l\'image', after);
-        break;
-      }
-    }
-    this.requestRender();
-  }
-
-  private wheel(e: WheelEvent): void {
-    if (!this.project) return;
-    e.preventDefault();
-    const s = this.screenPos(e);
-    const px = this.selectedPixmap();
-    if (e.shiftKey && px) {
-      const f = e.deltaY + e.deltaX < 0 ? this.pixmapStep : 2 - this.pixmapStep;
-      this.updateItem(px.id, { scale: px.scale * f }, 'échelle de l\'image', `scale-${px.id}`);
-      this.status(this.selectionStatus());
-      return;
-    }
-    // Lines (mouse wheel) or pixels (touchpad); ctrlKey = touchpad pinch.
-    const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-    const factor = Math.pow(ZOOM_STEP, -delta / (e.ctrlKey ? 25 : 100));
-    this.zoom(factor, s);
-  }
-
-  private async contextMenu(screen: Pt, cx: number, cy: number): Promise<void> {
-    if (!this.project) return;
-    const hit = this.pick(screen);
-    if (hit && hit.item.kind !== 'pixmap' && this.selection.has(hit.item.id)) {
-      await this.chooseStyle();
-      return;
-    }
-    if (!this.currentLayer) return this.status('Créez ou choisissez d\'abord un calque.');
-    const scene = this.snapTarget(screen) ?? this.cam.toScene(screen);
-    const groups: Record<string, string> = { lines: 'Droites', circles: 'Cercles et ellipse', arcs: 'Arcs et spirale' };
-    const entries: ({ label: string; value: ToolId; icon?: string } | { group: string })[] = [];
-    let last = '';
-    for (const t of TOOLS.filter((t) => t.group !== 'nav')) {
-      if (t.group !== last && groups[t.group]) entries.push({ group: groups[t.group] });
-      last = t.group;
-      entries.push({ label: t.label, value: t.id, icon: icon(t.icon) });
-    }
-    const chosen = await popupMenu(cx, cy, entries);
-    if (!chosen) return;
-    this.setTool(chosen);
-    // Mark the spot with a point, a handy anchor for the next clicks.
-    this.addItems([{ kind: 'point', ...this.stroke(), width: 7, p: scene, weight: 0 }], 'point');
-  }
-
-  private keyDown(e: KeyboardEvent): void {
-    if (!this.project) return;
-    const t = e.target as HTMLElement;
-    if (t && (t.closest('input, textarea, select, [contenteditable]') || document.querySelector('dialog[open]'))) return;
-    const ctrl = e.ctrlKey || e.metaKey;
-    const k = e.key.toLowerCase();
-    if (ctrl) {
-      if (k === 'z' && !e.shiftKey) this.undo();
-      else if (k === 'y' || (k === 'z' && e.shiftKey)) this.redo();
-      else if (k === 's') void this.exportZip();
-      else if (k === 'a') this.setSelection(this.currentLayer?.items.map((i) => i.id) ?? []);
-      else return;
-      e.preventDefault();
-      return;
-    }
-    if (e.altKey) return;
-    if (this.tool.key(this, e)) {
-      e.preventDefault();
-      return;
-    }
-    if (this.pixmapKey(e)) {
-      e.preventDefault();
-      return;
-    }
-    switch (e.key) {
-      case 'Escape':
-        if (this.toolId === 'select') this.setSelection([]);
-        else this.tool.reset(this);
-        break;
-      case 'Delete':
-      case 'Backspace':
-        this.deleteSelection();
-        break;
-      case ' ':
-        this.selectNext();
-        break;
-      default: {
-        if (k === 'c') void this.chooseColor();
-        else if (k === 't') void this.chooseWidth();
-        else if (k === 'w') void this.editPointWeight();
-        else if (k === 'a') void this.editArcAngle();
-        else if (k === 's') void this.spiralOptions();
-        else if (k === 'f') this.zoomToFit();
-        else if (k === '+' || k === '=') this.zoom(ZOOM_STEP);
-        else if (k === '-') this.zoom(1 / ZOOM_STEP);
-        else {
-          const def = TOOLS.find((d) => d.key?.toLowerCase() === k);
-          if (!def) return;
-          this.setTool(def.id);
-        }
-      }
-    }
-    e.preventDefault();
   }
 
   /* ========================================================== options */
@@ -1145,254 +732,4 @@ export class App {
     this.onChange();
     this.requestRender();
   }
-
-  /* =========================================================== projects */
-
-  private scheduleSave(): void {
-    if (!this.project) return;
-    window.clearTimeout(this.saveTimer);
-    this.saving = true;
-    this.saveTimer = window.setTimeout(() => void this.saveNow(), 600);
-  }
-
-  async saveNow(): Promise<void> {
-    window.clearTimeout(this.saveTimer);
-    const p = this.project;
-    if (!p) return;
-    const c = this.cam.center();
-    p.view = { zoom: this.cam.zoom, cx: c.x, cy: c.y };
-    try {
-      await store.saveProject(p);
-      this.saving = false;
-    } catch (e) {
-      this.status(`Enregistrement dans le navigateur impossible : ${(e as Error).message}`);
-    }
-    this.onChange();
-  }
-
-  private async open(project: Project, fit: boolean): Promise<void> {
-    await this.closeProject(false);
-    this.project = project;
-    this.currentLayerId = project.layers[project.layers.length - 1]?.id ?? null;
-    store.setLastProjectId(project.id);
-    this.onProjectOpen(true);
-    this.resize();
-    this.setTool('select');
-    await this.loadMap(fit || !project.view);
-    if (!fit && project.view) {
-      this.cam.setZoom(project.view.zoom);
-      this.cam.centerOn(pt(project.view.cx, project.view.cy));
-    } else if (!project.mapFile) this.zoomToFit();
-    // Pictures of the layers.
-    const files = new Set<string>();
-    for (const l of project.layers) for (const it of l.items) if (it.kind === 'pixmap') files.add(it.file);
-    for (const f of files) {
-      const blob = await store.getFile(project.id, f);
-      if (blob) await this.loadPicture(f, blob, false);
-    }
-    this.onChange();
-    this.requestRender();
-  }
-
-  async openStored(id: string): Promise<void> {
-    const p = await store.loadProject(id);
-    if (!p) {
-      await alertDialog('Projet introuvable', 'Ce projet n\'existe plus dans ce navigateur.');
-      return;
-    }
-    await this.open(p, false);
-  }
-
-  async closeProject(showStart = true): Promise<void> {
-    if (this.project) await this.saveNow();
-    this.project = null;
-    for (const p of this.pictures.values()) p.close();
-    this.pictures.clear();
-    this.history.clear();
-    this.selection.clear();
-    this.currentLayerId = null;
-    this.options.gray = false;
-    this.cam.bounds = null;
-    if (showStart) {
-      store.setLastProjectId(null);
-      this.onProjectOpen(false);
-    }
-    this.requestRender();
-  }
-
-  /** New project from a map picture. */
-  async newProject(mapFile?: File): Promise<void> {
-    const file = mapFile ?? (await pickFiles({ accept: 'image/*' }))[0];
-    if (!file) return;
-    const name = await promptText('Nouveau projet', 'Nom du projet', splitExt(file.name)[0]);
-    if (!name) return;
-    const p = emptyProject(name);
-    p.mapFile = safeFileName(file.name);
-    p.mapName = splitExt(file.name)[0];
-    p.layers = [emptyLayer('calque_1')];
-    await store.putFile(p.id, p.mapFile, file);
-    await store.saveProject(p);
-    void store.requestPersistence();
-    await this.open(p, true);
-    this.status('Projet créé. Mesurez l\'échelle dans le panneau « Carte » pour obtenir des distances réelles.');
-  }
-
-  /** Import a desktop project (folder or zip). */
-  async importProjectFiles(files: { path: string; blob: Blob }[]): Promise<boolean> {
-    let res: ImportResult | null;
-    try {
-      res = await importProject(files);
-    } catch (e) {
-      await alertDialog('Import impossible', `Lecture des fichiers impossible : ${(e as Error).message}`);
-      return false;
-    }
-    if (!res) return false;
-    const { project, files: pf, warnings } = res;
-    if (!project.layers.length) project.layers = [emptyLayer('calque_1')];
-    this.status('Import du projet…');
-    for (const [name, blob] of pf) await store.putFile(project.id, name, blob.type ? blob : new Blob([blob], { type: mimeOf(name) }));
-    await store.saveProject(project);
-    void store.requestPersistence();
-    await this.open(project, true);
-    if (res.missingMap) {
-      const ok = await confirmDialog('Carte introuvable', `La carte « ${res.missingMap} » n'était pas dans les fichiers sélectionnés. Voulez-vous la choisir maintenant ?`, 'Choisir la carte');
-      if (ok) {
-        const [f] = await pickFiles({ accept: 'image/*' });
-        if (f) await this.setMapFile(f.name, f);
-      }
-    }
-    if (warnings.length) await alertDialog('Import terminé avec des avertissements', h('ul', {}, ...warnings.map((w) => h('li', {}, w))));
-    else this.status(`Projet « ${project.name} » importé (${project.layers.length} calque(s)).`);
-    return true;
-  }
-
-  async pickProjectFolder(): Promise<void> {
-    const files = await pickFiles({ directory: true });
-    if (files.length) await this.handleFiles(files.map((f) => ({ path: f.webkitRelativePath || f.name, blob: f })));
-  }
-
-  async pickProjectFiles(): Promise<void> {
-    const files = await pickFiles({ multiple: true, accept: '.zip,.gribz,.grib,.xml,image/*' });
-    if (files.length) await this.handleFiles(files.map((f) => ({ path: f.webkitRelativePath || f.name, blob: f })));
-  }
-
-  /** Files dropped or picked: a project, layers, a map or a picture. */
-  async handleFiles(files: { path: string; blob: Blob }[]): Promise<void> {
-    const hasProject = files.some((f) => /\.(grib|zip|gribz)$/i.test(f.path));
-    if (hasProject) {
-      if (await this.importProjectFiles(files)) return;
-      if (this.project && files.some((f) => /\.(xml|zip)$/i.test(f.path))) return this.importLayerFiles(files);
-      await alertDialog('Aucun projet', 'Aucun fichier de projet Gribouillot (.grib) n\'a été trouvé.');
-      return;
-    }
-    if (this.project && files.some((f) => /\.xml$/i.test(f.path))) return this.importLayerFiles(files);
-    const img = files.find((f) => isImageName(f.path));
-    if (img) {
-      const file = new File([img.blob], img.path.split('/').pop()!, { type: img.blob.type || mimeOf(img.path) });
-      if (!this.project) return this.newProject(file);
-      const choice = await openDialog('Image déposée', `Que faire de « ${file.name} » ?`, [
-        { label: 'Annuler', value: null },
-        { label: 'Remplacer la carte', value: 'map' as const },
-        { label: 'Ajouter au calque', value: 'pic' as const, primary: true },
-      ]);
-      if (choice === 'map') await this.setMapFile(file.name, file);
-      else if (choice === 'pic') await this.addPictureFile(file, file.name);
-      return;
-    }
-    await alertDialog('Fichiers non reconnus', 'Déposez un dossier de projet Gribouillot, un .zip, un calque .xml ou une image.');
-  }
-
-  async exportZip(): Promise<void> {
-    const p = this.project;
-    if (!p) return;
-    this.status('Préparation du fichier .zip…');
-    await this.saveNow();
-    const blob = await exportProjectZip(p, (name) => store.getFile(p.id, name));
-    download(blob, `${safeFileName(p.name)}.zip`);
-    this.status('Projet exporté. Décompressé, il s\'ouvre aussi dans Gribouillot pour ordinateur.');
-  }
-
-  async renameProject(): Promise<void> {
-    const p = this.project!;
-    const n = await promptText('Renommer le projet', 'Nom du projet', p.name);
-    if (n) {
-      p.name = n;
-      this.changed();
-    }
-  }
-
-  /** Export the current view, or the whole map, as a picture. */
-  async exportImage(): Promise<void> {
-    const p = this.project;
-    if (!p) return;
-    const map = this.mapPicture();
-    const what = h('select', {},
-      h('option', { value: 'view' }, 'La vue actuelle'),
-      map ? h('option', { value: '1' }, `Toute la carte, taille réelle (${map.w} × ${map.h} px)`) : null,
-      map ? h('option', { value: '0.5' }, `Toute la carte, 50 % (${Math.round(map.w / 2)} × ${Math.round(map.h / 2)} px)`) : null,
-      map ? h('option', { value: '0.25' }, `Toute la carte, 25 % (${Math.round(map.w / 4)} × ${Math.round(map.h / 4)} px)`) : null,
-    );
-    const format = h('select', {}, h('option', { value: 'image/png' }, 'PNG'), h('option', { value: 'image/jpeg' }, 'JPEG (plus léger)'));
-    const ok = await openDialog('Exporter une image', h('div', { class: 'options' },
-      h('label', {}, 'Contenu', what), h('label', {}, 'Format', format)), [
-      { label: 'Annuler', value: false },
-      { label: 'Exporter', value: true, primary: true },
-    ]);
-    if (!ok) return;
-    let canvas: HTMLCanvasElement;
-    if (what.value === 'view') canvas = this.renderOffscreen(this.cam.width, this.cam.height, this.cam.zoom, this.cam.panX, this.cam.panY, this.dpr);
-    else {
-      const k = parseFloat(what.value);
-      const w = Math.round(map!.w * k), hh = Math.round(map!.h * k);
-      if (w > 16384 || hh > 16384 || w * hh > 250e6) {
-        await alertDialog('Image trop grande', 'Le navigateur ne peut pas produire une image aussi grande : choisissez une taille plus petite.');
-        return;
-      }
-      this.status('Rendu de l\'image…');
-      canvas = this.renderOffscreen(w, hh, k, 0, 0, 1);
-    }
-    const type = format.value;
-    canvas.toBlob((blob) => {
-      if (!blob) return void alertDialog('Export impossible', 'Le navigateur n\'a pas pu produire l\'image.');
-      download(blob, `${safeFileName(p.name)}.${type === 'image/png' ? 'png' : 'jpg'}`);
-      this.status('Image exportée.');
-    }, type, 0.92);
-  }
-
-  private renderOffscreen(w: number, hh: number, zoom: number, panX: number, panY: number, dpr: number): HTMLCanvasElement {
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(w * dpr);
-    canvas.height = Math.round(hh * dpr);
-    const cam = new Camera();
-    cam.width = w;
-    cam.height = hh;
-    cam.zoom = zoom;
-    cam.panX = panX;
-    cam.panY = panY;
-    const r = new Renderer(canvas.getContext('2d')!, cam);
-    r.clear('#ffffff', dpr);
-    const map = this.mapPicture();
-    if (map) r.map(map, this.options.gray && map.hasGray(), dpr);
-    r.layers(this.project!.layers, { selection: new Set(), showWeight: this.options.weights, pictures: this.pictures, dpr });
-    return canvas;
-  }
-
-  /** Restore the last opened project, if any. */
-  async restore(): Promise<boolean> {
-    const id = store.lastProjectId();
-    if (!id) return false;
-    const p = await store.loadProject(id);
-    if (!p) return false;
-    await this.open(p, false);
-    return true;
-  }
-}
-
-function normRect(a: Pt, b: Pt): Rect {
-  return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
-}
-
-function splitExt(name: string): [string, string] {
-  const i = name.lastIndexOf('.');
-  return i > 0 ? [name.slice(0, i), name.slice(i)] : [name, ''];
 }

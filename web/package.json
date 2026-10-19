@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build:single": "tsc --noEmit && node scripts/singlefile.mjs"
+    "build:single": "tsc --noEmit && node scripts/singlefile.mjs",
+    "e2e": "npm run build:single && node tests/e2e/tools.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.3"

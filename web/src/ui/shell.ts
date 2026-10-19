@@ -62,17 +62,17 @@ function buildMenus(app: App): void {
   const need = () => !app.project;
   $('#menus').append(
     menuButton('Projet', () => [
-      { label: 'Nouveau projet (choisir une carte)…', run: () => app.newProject() },
+      { label: 'Nouveau projet (choisir une carte)…', run: () => app.session.newProject() },
       { label: 'Mes projets…', run: () => projectsDialog(app) },
       { group: 'Fichiers Gribouillot' },
-      { label: 'Importer un projet (dossier)…', run: () => app.pickProjectFolder() },
-      { label: 'Importer un projet (.zip ou fichiers)…', run: () => app.pickProjectFiles() },
-      { label: 'Exporter le projet (.zip)', key: 'Ctrl+S', run: () => app.exportZip(), disabled: need() },
+      { label: 'Importer un projet (dossier)…', run: () => app.session.pickProjectFolder() },
+      { label: 'Importer un projet (.zip ou fichiers)…', run: () => app.session.pickProjectFiles() },
+      { label: 'Exporter le projet (.zip)', key: 'Ctrl+S', run: () => app.session.exportZip(), disabled: need() },
       { label: 'Importer un calque (.xml)…', run: () => app.pickLayerFiles(), disabled: need() },
-      { label: 'Exporter une image…', run: () => app.exportImage(), disabled: need() },
+      { label: 'Exporter une image…', run: () => app.session.exportImage(), disabled: need() },
       { group: 'Projet' },
       { label: 'Renommer le projet…', run: () => app.renameProject(), disabled: need() },
-      { label: 'Fermer le projet', run: () => app.closeProject(), disabled: need() },
+      { label: 'Fermer le projet', run: () => app.session.closeProject(), disabled: need() },
     ]),
     menuButton('Édition', () => [
       { label: `Annuler${app.history.undoLabel ? ` (${app.history.undoLabel})` : ''}`, key: 'Ctrl+Z', run: () => app.undo(), disabled: !app.history.undoLabel },
@@ -207,15 +207,13 @@ function section(title: string, ...content: (Node | null)[]): HTMLElement {
 function refreshSidebar(app: App): void {
   const p = app.project;
   const active = document.activeElement;
-  // Don't rebuild while the user is typing in a field of the panel.
-  if (active && sidebarBody.contains(active) && active.tagName === 'INPUT' && (active as HTMLInputElement).type !== 'range') {
-    return;
-  }
+  // Don't rebuild while the user is typing in a field of the panel, or moving a slider.
+  if (active && sidebarBody.contains(active) && active.tagName === 'INPUT') return;
   sidebarBody.replaceChildren();
   if (!p) return;
 
   /* Project */
-  const saved = h('span', { class: 'saved' }, app.saving ? 'enregistrement…' : 'enregistré dans le navigateur');
+  const saved = h('span', { class: 'saved' }, app.session.saving ? 'enregistrement…' : 'enregistré dans le navigateur');
   sidebarBody.append(
     h('div', { class: 'project-title' },
       h('button', { type: 'button', class: 'link', title: 'Renommer le projet', onclick: () => void app.renameProject() }, p.name),
@@ -241,7 +239,7 @@ function refreshSidebar(app: App): void {
       h('button', { type: 'button', class: 'link', title: p.mapFile ? `Fichier : ${p.mapFile} — cliquer pour renommer` : '', onclick: () => void app.renameMap() }, p.mapName || p.mapFile || 'Aucune carte'),
       h('span', { class: 'spacer' }),
       gray,
-      h('button', { type: 'button', class: 'small', onclick: () => void app.changeMap() }, p.mapFile ? 'Changer…' : 'Choisir…')),
+      h('button', { type: 'button', class: 'small', onclick: () => void app.session.changeMap() }, p.mapFile ? 'Changer…' : 'Choisir…')),
     h('div', { class: 'scale-row', title: 'Échelle : une distance mesurée sur la carte (en pixels) et sa valeur réelle' },
       ruler, px, h('span', {}, 'px ='), val, unit),
     h('p', { class: 'hint' }, metersPerPx ? `1 px = ${fmt(metersPerPx, metersPerPx < 10 ? 2 : 1)} m sur la carte` : 'Échelle non définie : les mesures sont en pixels.'),
@@ -274,6 +272,11 @@ function refreshSidebar(app: App): void {
       op.addEventListener('input', () => {
         opv.textContent = `${op.value} %`;
         app.setLayerOpacity(l.id, parseInt(op.value, 10));
+      });
+      op.addEventListener('change', () => {
+        // End of the move: let the panel refresh again.
+        op.blur();
+        app.onChange();
       });
       op.addEventListener('click', (e) => e.stopPropagation());
       const del = h('button', { type: 'button', class: 'icon-btn', title: 'Supprimer le calque', onclick: (e: Event) => { e.stopPropagation(); void app.deleteLayer(l.id); } },
@@ -450,9 +453,9 @@ function buildStartScreen(app: App): void {
       h('h1', {}, h('img', { src: icon('circle-3points.png'), alt: '' }), 'Gribouillot'),
       h('p', { class: 'tagline' }, 'Constructions géométriques sur une carte, par calques. Créé pour la chasse à la Chouette d\'Or.'),
       h('div', { class: 'start-actions' },
-        h('button', { type: 'button', class: 'primary big', onclick: () => void app.newProject() }, 'Nouveau projet à partir d\'une carte…'),
-        h('button', { type: 'button', class: 'big', onclick: () => void app.pickProjectFolder() }, 'Ouvrir un projet Gribouillot (dossier)…'),
-        h('button', { type: 'button', class: 'big', onclick: () => void app.pickProjectFiles() }, 'Ouvrir un .zip ou des fichiers…'),
+        h('button', { type: 'button', class: 'primary big', onclick: () => void app.session.newProject() }, 'Nouveau projet à partir d\'une carte…'),
+        h('button', { type: 'button', class: 'big', onclick: () => void app.session.pickProjectFolder() }, 'Ouvrir un projet Gribouillot (dossier)…'),
+        h('button', { type: 'button', class: 'big', onclick: () => void app.session.pickProjectFiles() }, 'Ouvrir un .zip ou des fichiers…'),
       ),
       h('p', { class: 'hint' }, 'Vous pouvez aussi glisser-déposer ici une image de carte, un dossier de projet ou un .zip.'),
       h('div', { id: 'recent' }),
@@ -478,13 +481,13 @@ async function refreshStartScreen(app: App): Promise<void> {
 function projectList(app: App, list: store.ProjectSummary[], onDelete: () => void, onOpen?: () => void): HTMLElement {
   return h('ul', { class: 'projects' }, ...list.map((p) =>
     h('li', {},
-      h('button', { type: 'button', class: 'open', onclick: () => { onOpen?.(); void app.openStored(p.id); } },
+      h('button', { type: 'button', class: 'open', onclick: () => { onOpen?.(); void app.session.openStored(p.id); } },
         h('strong', {}, p.name),
         h('span', {}, `${p.mapName || 'sans carte'} · ${p.layerCount} calque(s) · ${new Date(p.updatedAt).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}`)),
       h('button', {
         type: 'button', class: 'icon-btn', title: 'Supprimer ce projet du navigateur', onclick: async () => {
           if (await confirmDialog('Supprimer le projet', `Supprimer définitivement « ${p.name} » de ce navigateur ? Exportez-le d'abord en .zip si vous voulez le garder.`, 'Supprimer', true)) {
-            if (app.project?.id === p.id) await app.closeProject();
+            if (app.project?.id === p.id) await app.session.closeProject();
             await store.deleteProject(p.id);
             onDelete();
           }
@@ -553,7 +556,7 @@ function buildDropZone(app: App): void {
     if (entries.length && entries.some((x) => x.isDirectory)) {
       files = (await Promise.all(entries.map((x) => entryFiles(x)))).flat();
     } else files = fromFileList(dt.files);
-    if (files.length) await app.handleFiles(files);
+    if (files.length) await app.session.handleFiles(files);
   });
 }
 

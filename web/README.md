@@ -16,6 +16,7 @@ npm run dev      # http://localhost:5173
 npm test         # tests unitaires (géométrie, formats .grib / .xml)
 npm run build    # typecheck + build statique dans dist/
 npm run build:single  # un seul fichier dist-single/gribouillot.html, sans serveur
+npm run e2e      # test des outils dans Chromium (playwright-core), sur le fichier unique
 ```
 
 `gribouillot.html` contient tout (code, styles, icônes) : il s'ouvre d'un double-clic, depuis
@@ -33,8 +34,13 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 | `src/geom.ts` | géométrie plane, conventions d'angles de Qt (`QLineF`) |
 | `src/model.ts` | données d'un projet : calques et éléments (immuables) |
 | `src/shapes.ts` | spirale à 4 centres, aide au tracé d'arcs, sélection (hit-test) |
-| `src/tools.ts` | les outils de construction (machines à états + aperçus) |
-| `src/app.ts` | état de l'application, souris/clavier, annuler/rétablir, projets |
+| `src/constructions.ts` | les constructions : étapes de saisie et calcul de la figure (fonctions pures, testées) |
+| `src/tools/` | les outils : moteur commun des constructions, sélection, mesure, point, spirale |
+| `src/edits.ts` | modifications des calques, en fonctions pures (base de l'annulation) |
+| `src/app.ts` | état de l'application, commandes d'édition, annuler/rétablir |
+| `src/input.ts` | souris, tactile, clavier |
+| `src/session.ts` | ouverture, sauvegarde automatique, import / export d'un projet |
+| `src/describe.ts` | texte de la barre d'état sur la sélection (longueurs, angles) |
 | `src/render.ts` | rendu Canvas (épaisseurs indépendantes du zoom) |
 | `src/images.ts` | images décodées + copies réduites pour les très grandes cartes |
 | `src/legacy.ts` | lecture/écriture `.grib` (INI QSettings, couleurs `@Variant`) et `.xml` |

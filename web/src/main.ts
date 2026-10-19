@@ -6,12 +6,12 @@ import { $ } from './ui/dom';
 const app = new App($('#canvas') as HTMLCanvasElement, $('#status'), $('#coords'));
 buildShell(app);
 
-window.addEventListener('pagehide', () => void app.saveNow());
+window.addEventListener('pagehide', () => void app.session.saveNow());
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') void app.saveNow();
+  if (document.visibilityState === 'hidden') void app.session.saveNow();
 });
 
-app.restore().then((restored) => {
+app.session.restore().then((restored) => {
   if (!restored) app.onProjectOpen(false);
 }).catch(() => app.onProjectOpen(false));
 

@@ -1,0 +1,574 @@
+{
+ "steps": [
+  {
+   "name": "points",
+   "added": 3,
+   "status": "Point : cliquez une position."
+  },
+  {
+   "name": "segment (snapped)",
+   "added": 1,
+   "status": "Segment : cliquez une première extrémité."
+  },
+  {
+   "name": "line",
+   "added": 1,
+   "status": "Droite : cliquez un premier point."
+  },
+  {
+   "name": "horizontal + vertical",
+   "added": 2,
+   "status": "Verticale : cliquez un point de passage."
+  },
+  {
+   "name": "circle center",
+   "added": 1,
+   "status": "Cercle : cliquez le centre."
+  },
+  {
+   "name": "circle diameter",
+   "added": 1,
+   "status": "Cercle : cliquez une extrémité du diamètre."
+  },
+  {
+   "name": "circle 3 points",
+   "added": 1,
+   "status": "Cercle : cliquez un premier point de la circonférence."
+  },
+  {
+   "name": "circle 3 aligned points (refused)",
+   "added": 0,
+   "status": "Les 3 points doivent être distincts et non alignés."
+  },
+  {
+   "name": "circle radius value",
+   "added": 1,
+   "status": "Cercle de rayon donné : cliquez le centre."
+  },
+  {
+   "name": "parallel x2 (reference kept)",
+   "added": 2,
+   "status": "Parallèle : cliquez un point de passage."
+  },
+  {
+   "name": "perpendicular",
+   "added": 1,
+   "status": "Perpendiculaire : cliquez un point de passage."
+  },
+  {
+   "name": "bisection (same segment twice)",
+   "added": 1,
+   "status": "Médiatrice : sélectionnez un autre segment."
+  },
+  {
+   "name": "tangents",
+   "added": 2,
+   "status": "Tangentes : cliquez un point extérieur au cercle."
+  },
+  {
+   "name": "tangents from inside (refused)",
+   "added": 0,
+   "status": "Tangentes : cliquez un point extérieur au cercle."
+  },
+  {
+   "name": "circle from radius",
+   "added": 1,
+   "status": "Cercle : sélectionnez un segment (le rayon)."
+  },
+  {
+   "name": "circle from diameter",
+   "added": 1,
+   "status": "Cercle : sélectionnez un autre segment."
+  },
+  {
+   "name": "arc by mouse",
+   "added": 1,
+   "status": "Arc : cliquez le centre."
+  },
+  {
+   "name": "arc by typed angle",
+   "added": 1,
+   "status": "Arc : cliquez le centre."
+  },
+  {
+   "name": "arc full turn becomes a circle",
+   "added": 1,
+   "status": "Arc : cliquez le centre."
+  },
+  {
+   "name": "angle line by mouse",
+   "added": 1,
+   "status": "Angle : sélectionnez la droite de référence."
+  },
+  {
+   "name": "angle line by typed angle",
+   "added": 1,
+   "status": "Angle : sélectionnez la droite de référence."
+  },
+  {
+   "name": "arc from circle",
+   "added": 0,
+   "status": "Arc : sélectionnez un cercle à découper."
+  },
+  {
+   "name": "ellipse",
+   "added": 1,
+   "status": "Ellipse : cliquez un premier foyer."
+  },
+  {
+   "name": "ellipse too small (refused)",
+   "added": 0,
+   "status": "Ellipse : cliquez un premier foyer."
+  },
+  {
+   "name": "spiral 2 centers",
+   "added": 1,
+   "status": "Spirale : cliquez le premier centre."
+  },
+  {
+   "name": "spiral 3 centers",
+   "added": 1,
+   "status": "Spirale : cliquez le premier centre."
+  },
+  {
+   "name": "spiral 4 centers",
+   "added": 1,
+   "status": "Spirale : cliquez le premier centre."
+  },
+  {
+   "name": "preselection: circle through 3 selected points",
+   "added": 1,
+   "status": "Cercle : cliquez un premier point de la circonférence."
+  },
+  {
+   "name": "preselection: parallel to the selected segment",
+   "added": 1,
+   "status": "Parallèle : cliquez un point de passage."
+  },
+  {
+   "name": "draw centers option",
+   "added": 2,
+   "status": "Cercle : cliquez le centre."
+  },
+  {
+   "name": "escape resets the tool",
+   "added": 1,
+   "status": "Segment : cliquez une première extrémité."
+  },
+  {
+   "name": "undo x2 + redo",
+   "added": -1,
+   "status": "Rétabli : cercle"
+  }
+ ],
+ "items": [
+  {
+   "kind": "point",
+   "color": "#000000",
+   "width": 5,
+   "p": {
+    "x": 300,
+    "y": 300
+   },
+   "weight": 0
+  },
+  {
+   "kind": "point",
+   "color": "#000000",
+   "width": 5,
+   "p": {
+    "x": 500,
+    "y": 320
+   },
+   "weight": 0
+  },
+  {
+   "kind": "point",
+   "color": "#000000",
+   "width": 5,
+   "p": {
+    "x": 420,
+    "y": 520
+   },
+   "weight": 0
+  },
+  {
+   "kind": "segment",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": 300,
+    "y": 300
+   },
+   "p2": {
+    "x": 500,
+    "y": 320
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": -29360
+   },
+   "p2": {
+    "x": 50000,
+    "y": 30640
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": 150
+   },
+   "p2": {
+    "x": 50000,
+    "y": 150
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": 160,
+    "y": -50000
+   },
+   "p2": {
+    "x": 160,
+    "y": 50000
+   }
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 850,
+    "y": 620
+   },
+   "r": 53.8516
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 391.7308,
+    "y": 392.6923
+   },
+   "r": 130.4086
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 1000,
+    "y": 700
+   },
+   "r": 100
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": -4522
+   },
+   "p2": {
+    "x": 50000,
+    "y": 5478
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": -4420
+   },
+   "p2": {
+    "x": 50000,
+    "y": 5580
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": 5472,
+    "y": -50000
+   },
+   "p2": {
+    "x": -4528,
+    "y": 50000
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": 5431,
+    "y": -50000
+   },
+   "p2": {
+    "x": -4569,
+    "y": 50000
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": -11400.2024
+   },
+   "p2": {
+    "x": 50000,
+    "y": 11541.371
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": 12000.2024
+   },
+   "p2": {
+    "x": 50000,
+    "y": -10941.371
+   }
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 300,
+    "y": 300
+   },
+   "r": 200.9975
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 400,
+    "y": 310
+   },
+   "r": 100.4988
+  },
+  {
+   "kind": "arc",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 800,
+    "y": 500
+   },
+   "r": 100,
+   "start": 0,
+   "span": 128.6598
+  },
+  {
+   "kind": "arc",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 1200,
+    "y": 500
+   },
+   "r": 60,
+   "start": 0,
+   "span": -75
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 1200,
+    "y": 1000
+   },
+   "r": 60
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": 28511.1111,
+    "y": -50000
+   },
+   "p2": {
+    "x": -27044.4444,
+    "y": 50000
+   }
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": -50000,
+    "y": -53.6059
+   },
+   "p2": {
+    "x": 50000,
+    "y": 1628.6252
+   }
+  },
+  {
+   "kind": "arc",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 700,
+    "y": 300
+   },
+   "r": 67.082,
+   "start": 90,
+   "span": 90
+  },
+  {
+   "kind": "ellipse",
+   "color": "#000000",
+   "width": 5,
+   "f1": {
+    "x": 1000,
+    "y": 200
+   },
+   "f2": {
+    "x": 1080,
+    "y": 230
+   },
+   "dSum": 196.8504
+  },
+  {
+   "kind": "spiral",
+   "color": "#000000",
+   "width": 5,
+   "centers": [
+    {
+     "x": 200,
+     "y": 1000
+    },
+    {
+     "x": 250,
+     "y": 1000
+    },
+    {
+     "x": 250,
+     "y": 950
+    },
+    {
+     "x": 200,
+     "y": 950
+    }
+   ]
+  },
+  {
+   "kind": "spiral",
+   "color": "#000000",
+   "width": 5,
+   "centers": [
+    {
+     "x": 500,
+     "y": 1000
+    },
+    {
+     "x": 560,
+     "y": 1000
+    },
+    {
+     "x": 560,
+     "y": 950
+    },
+    {
+     "x": 500,
+     "y": 950
+    }
+   ]
+  },
+  {
+   "kind": "spiral",
+   "color": "#000000",
+   "width": 5,
+   "centers": [
+    {
+     "x": 800,
+     "y": 1000
+    },
+    {
+     "x": 860,
+     "y": 1000
+    },
+    {
+     "x": 860,
+     "y": 940
+    },
+    {
+     "x": 805,
+     "y": 945
+    }
+   ]
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 391.7308,
+    "y": 392.6923
+   },
+   "r": 130.4086
+  },
+  {
+   "kind": "line",
+   "color": "#000000",
+   "width": 5,
+   "p1": {
+    "x": 6310,
+    "y": -50000
+   },
+   "p2": {
+    "x": -3690,
+    "y": 50000
+   }
+  },
+  {
+   "kind": "circle",
+   "color": "#000000",
+   "width": 5,
+   "c": {
+    "x": 1300,
+    "y": 300
+   },
+   "r": 40
+  },
+  {
+   "kind": "point",
+   "color": "#000000",
+   "width": 5,
+   "p": {
+    "x": 1300,
+    "y": 300
+   },
+   "weight": 0
+  }
+ ]
+}
