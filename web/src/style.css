@@ -259,3 +259,18 @@ table.towns td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-a
 table.towns select { max-width: 320px; }
 table.towns input[type=number] { width: 5em; }
 table.towns .hint { margin: 2px 0 0; }
+
+/* Around a point */
+.nearby h3 { margin: 10px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.nearby .row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nearby input[type=search] { flex: 1; min-width: 140px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 12px; padding: 2px 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); color: inherit; cursor: pointer; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip.clear { border-style: dashed; }
+ul.nearby-list { list-style: none; margin: 4px 0 0; padding: 0; max-height: 42vh; overflow-y: auto; border-top: 1px solid var(--line); }
+ul.nearby-list li { padding: 5px 2px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.nearby-head { display: flex; gap: 8px; justify-content: space-between; }
+.nearby-head .dist { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nearby-links { display: flex; gap: 12px; margin-top: 2px; font-size: 12px; }
+.nearby .hint { margin: 2px 0 0; }

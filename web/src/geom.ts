@@ -183,3 +183,21 @@ export interface Rect {
   w: number;
   h: number;
 }
+
+/** The part of the segment [a, b] inside the rectangle (Liang-Barsky), null if none. */
+export function clipSegment(a: Pt, b: Pt, r: Rect): Seg | null {
+  let t0 = 0, t1 = 1;
+  const d = { x: b.x - a.x, y: b.y - a.y };
+  const sides: [number, number][] = [[-d.x, a.x - r.x], [d.x, r.x + r.w - a.x], [-d.y, a.y - r.y], [d.y, r.y + r.h - a.y]];
+  for (const [p, q] of sides) {
+    if (p === 0) {
+      if (q < 0) return null;
+    } else {
+      const t = q / p;
+      if (p < 0) t0 = Math.max(t0, t);
+      else t1 = Math.min(t1, t);
+      if (t0 > t1) return null;
+    }
+  }
+  return seg({ x: a.x + t0 * d.x, y: a.y + t0 * d.y }, { x: a.x + t1 * d.x, y: a.y + t1 * d.y });
+}

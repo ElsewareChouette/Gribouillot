@@ -43,6 +43,7 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 | `src/geo.ts` | calage GPS : Lambert-93, ajustement sur les repères, précision mesurée, lecture des coordonnées |
 | `src/places.ts` | recherche de communes (geo.api.gouv.fr, demande internet), listes de villes |
 | `src/intersections.ts` | intersections, milieux, extrémités, centres : aimantation et commande [I] |
+| `src/monuments.ts` | monuments historiques (base Mérimée) autour d'un point ou le long d'une droite |
 | `src/links.ts` | constructions liées : un tracé est reconstruit quand ce dont il dépend bouge |
 | `src/describe.ts` | texte de la barre d'état sur la sélection (longueurs, angles) |
 | `src/render.ts` | rendu Canvas (épaisseurs indépendantes du zoom) |
@@ -94,6 +95,23 @@ seulement, 0,6 km sur les 32 autres. Ce scan fait 128,5 m par pixel, pas 127.
 besoin le département entre parenthèses et un poids (« Clisson ; 3 », « Saint-Pierre (44) 2 »).
 Chaque nom est vérifié (homonymes au choix, noms approchés signalés), puis la commune est placée
 à la position de sa mairie, avec son nom affiché à côté du point.
+
+Un point (ou un cercle) sélectionné : *Autour de ce point…* liste les monuments historiques à
+moins de 0,25 à 20 km, filtrables par nature (église, croix, dolmen…), par date de protection
+(en 1993 ou avant) et par texte, avec leur fiche (POP), une recherche Google et Géoportail ;
+puis, à moins de 2 km, les lieux-dits et sites de l'IGN (data.geopf.fr). Une droite ou un
+segment sélectionné : les monuments dans une bande de part et d'autre, dans l'ordre le long de
+la droite. Chaque résultat peut être placé comme point nommé.
+
+La base Mérimée (ministère de la Culture, licence ouverte) est compactée par
+`npm run data:merimee` dans `public/data/merimee.json` (44 377 monuments situés, 1,2 Mo
+compressé), publiée avec le site et téléchargée au premier usage ; la page ouverte depuis le
+disque la prend sur le site.
+
+Cartes connues (`src/calibrations.ts`) : une carte reconnue à sa taille exacte reçoit son calage
+par défaut quand le projet n'en a pas, ainsi que son échelle si elle n'est pas définie. C'est le
+cas du scan Zarquos de la 989 (8460 × 7570 px, 31 villes calées par l'utilisateur : 0,5 km
+d'écart typique). Le panneau propose de revenir à ce calage par défaut.
 
 Les repères sont exportés à côté du `.grib`, dans `<projet>.web.json`, que la version bureau
 ignore.

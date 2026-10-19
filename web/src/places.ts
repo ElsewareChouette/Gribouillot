@@ -4,7 +4,7 @@
  * the searched names and positions are sent.
  */
 
-import type { LatLon } from './geo';
+import { fromLambert, kmBetween, toLambert, type LatLon } from './geo';
 
 export interface Town extends LatLon {
   name: string;
@@ -130,3 +130,73 @@ export async function matchTowns(reqs: TownRequest[], onProgress?: (done: number
 export async function townAt(ll: LatLon): Promise<Town | null> {
   return (await get({ lat: String(ll.lat), lon: String(ll.lon) }))[0] ?? null;
 }
+
+/* ============================================ places of the IGN map */
+
+export interface Place extends LatLon {
+  id: string;
+  name: string;
+  category: string; // « lieu-dit habité », « pont », « culte chrétien »…
+  town: string;
+  km: number;
+}
+
+const IGN = 'https://data.geopf.fr/geocodage/reverse';
+/** The IGN service searches 500 m around a position at most: a larger disc is covered by several searches. */
+const IGN_RADIUS = 500;
+export const PLACES_MAX_KM = 2;
+
+interface IgnFeature {
+  geometry: { coordinates: [number, number] };
+  properties: { toponym?: string; name?: string[]; category?: string[]; city?: string[]; extrafields?: { cleabs?: string } };
+}
+
+/** Named places of the IGN (lieux-dits, bridges, churches, cemeteries…) within `km` (2 at most). */
+export async function placesNear(ll: LatLon, km: number, onProgress?: (done: number, total: number) => void): Promise<Place[]> {
+  const r = Math.min(km, PLACES_MAX_KM) * 1000;
+  const c = toLambert(ll);
+  const step = IGN_RADIUS * Math.SQRT2; // the circles of a square grid cover it
+  const centers: LatLon[] = [];
+  const n = Math.ceil(r / step);
+  for (let i = -n; i <= n; i++) {
+    for (let j = -n; j <= n; j++) {
+      if (Math.hypot(i * step, j * step) <= r + step) centers.push(fromLambert({ x: c.x + i * step, y: c.y + j * step }));
+    }
+  }
+  const found = new Map<string, Place>();
+  let next = 0, done = 0;
+  const worker = async () => {
+    while (next < centers.length) {
+      const at = centers[next++];
+      const q = new URLSearchParams({ index: 'poi', limit: '50', searchgeom: JSON.stringify({ type: 'Circle', coordinates: [at.lon, at.lat], radius: IGN_RADIUS }) });
+      let res: Response;
+      try {
+        res = await fetch(`${IGN}?${q}`);
+      } catch {
+        throw new Error('Pas de connexion au service de l\'IGN (data.geopf.fr).');
+      }
+      if (!res.ok) throw new Error(`Le service de l'IGN a répondu ${res.status}.`);
+      for (const f of ((await res.json()) as { features: IgnFeature[] }).features) {
+        const p = f.properties;
+        const [lon, lat] = f.geometry.coordinates;
+        const name = p.toponym ?? p.name?.[0] ?? '';
+        const category = p.category?.[0] ?? '';
+        if (!name || category === 'administratif') continue;
+        const id = p.extrafields?.cleabs ?? `${name}@${lat},${lon}`;
+        const d = kmBetween(ll, { lat, lon });
+        if (d * 1000 <= r) found.set(id, { id, name, category, town: p.city?.[0] ?? '', lat, lon, km: d });
+      }
+      onProgress?.(++done, centers.length);
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return [...found.values()].sort((a, b) => a.km - b.km);
+}
+
+/* ================================================================ links */
+
+export const geoportailUrl = (ll: LatLon) =>
+  `https://www.geoportail.gouv.fr/carte?c=${ll.lon.toFixed(5)},${ll.lat.toFixed(5)}&z=15&l0=GEOGRAPHICALGRIDSYSTEMS.MAPS::GEOPORTAIL:OGC:WMTS(1)&permalink=yes`;
+
+export const osmUrl = (ll: LatLon) =>
+  `https://www.openstreetmap.org/?mlat=${ll.lat.toFixed(5)}&mlon=${ll.lon.toFixed(5)}#map=15/${ll.lat.toFixed(5)}/${ll.lon.toFixed(5)}`;

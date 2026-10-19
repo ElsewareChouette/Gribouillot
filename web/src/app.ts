@@ -8,12 +8,13 @@
  * the project's life (save, import, export) in session.ts.
  */
 
+import { knownAnchors, knownMap, type KnownMap } from './calibrations';
 import { Camera } from './camera';
 import type { Shape } from './constructions';
 import { describeSelection } from './describe';
 import * as edits from './edits';
-import { fitGeoref, formatLatLon, MODEL_LABELS, type Anchor, type Georef, type LatLon } from './geo';
-import { dist, pt, type Pt, type Rect } from './geom';
+import { fitGeoref, formatLatLon, kmBetween, MODEL_LABELS, type Anchor, type Georef, type LatLon } from './geo';
+import { clipSegment, dist, pt, seg, type Pt, type Rect } from './geom';
 import { History } from './history';
 import { clickSource, linksFor, propagate, uniqueIds } from './links';
 import { centerOf, crossings, remarkablePoints, SNAP_LABELS, type SnapPoint } from './intersections';
@@ -42,6 +43,7 @@ import { toolDef, type Tool, type ToolId } from './tools';
 import { alertDialog, confirmDialog, openDialog, promptNumber, promptText, styleDialog } from './ui/dialogs';
 import { fmt, h, pickFiles } from './ui/dom';
 import { placeDialog } from './ui/place';
+import { nearbyDialog, type Around } from './ui/nearby';
 import { townsDialog } from './ui/towns';
 
 export interface Hit {
@@ -766,6 +768,33 @@ export class App {
     return `Calage GPS : ${anchors.length} repères, précision ≈ ${fmt(g.rms, 1)} km (pire : ${worst?.name ?? '?'}, ${fmt(g.max!, 1)} km) — transformation ${MODEL_LABELS[g.model]}.${tip ? ' Cliquez une autre ville, ou un repère pour le corriger.' : ''}`;
   }
 
+  /** A map known to be calibrated (calibrations.ts), opened in a project without anchors: its calibration. */
+  applyKnownCalibration(size: { w: number; h: number }): void {
+    const p = this.project;
+    const known = knownMap(size);
+    if (!p || !known || p.anchors?.length) return;
+    this.setAnchors(knownAnchors(known));
+    // The scale too, if none was given: measured by the calibration, across the middle of the map.
+    const g = this.georef();
+    let scale = '';
+    if (g && (!p.scale.px || !p.scale.value)) {
+      const c = pt(size.w / 2, size.h / 2);
+      const k = (kmBetween(g.toLatLon(c), g.toLatLon(pt(c.x + 1000, c.y))) + kmBetween(g.toLatLon(c), g.toLatLon(pt(c.x, c.y + 1000)))) / 2;
+      this.setScale({ px: 1000, value: Math.round(k * 10) / 10, unit: 'km' });
+      scale = ` Échelle réglée : 1 px = ${fmt(k, 1)} m.`;
+    }
+    this.status(`Carte reconnue : ${known.name}. Calage GPS appliqué (${known.anchors.length} villes, précision ≈ ${fmt(g?.rms ?? 0, 1)} km).${scale}`);
+  }
+
+  /** The default calibration of the map, if it is a known one and the project has another. */
+  knownCalibration(): KnownMap | null {
+    const map = this.mapPicture();
+    const known = map ? knownMap(map) : undefined;
+    if (!known) return null;
+    const names = (this.project?.anchors ?? []).map((a) => a.name).sort().join('|');
+    return names === known.anchors.map((a) => a[0]).sort().join('|') ? null : known;
+  }
+
   setAnchors(anchors: Anchor[]): void {
     this.project!.anchors = anchors;
     this.changed();
@@ -801,6 +830,36 @@ export class App {
     this.addShapes(towns.map((t) => ({ kind: 'point', p: g.toPx(t.ll), weight: t.weight, label: t.name })), 'villes');
     const weighted = towns.some((t) => t.weight !== 0);
     this.status(`${towns.length} ville(s) placée(s) dans le calque « ${layer.name} ».${weighted && !this.options.weights ? ' Affichage → « Afficher les poids » pour voir les poids.' : ''}`);
+  }
+
+  /** The monuments and places around the selected point or circle center, or along the selected line. */
+  async aroundSelection(): Promise<void> {
+    const g = this.georef();
+    const sel = this.selectedItems();
+    const it = sel.length === 1 ? sel[0].item : null;
+    if (!g || !it) return;
+    let target: Around | null = null;
+    if (it.kind === 'point') target = { kind: 'point', ll: g.toLatLon(it.p), what: it.label ? `Point « ${it.label} »` : 'Point sélectionné' };
+    else if (it.kind === 'circle' || it.kind === 'arc') target = { kind: 'point', ll: g.toLatLon(it.c), what: 'Centre du cercle sélectionné' };
+    else if (it.kind === 'segment' || it.kind === 'line') {
+      // A line is followed across the map only: the calibration means nothing beyond.
+      const map = this.mapPicture();
+      const s = it.kind === 'line' && map ? clipSegment(it.p1, it.p2, { x: 0, y: 0, w: map.w, h: map.h }) : seg(it.p1, it.p2);
+      if (!s) return this.status('Cette droite ne traverse pas la carte.');
+      const pts = Array.from({ length: 33 }, (_, i) => g.toLatLon(pt(s.p1.x + ((s.p2.x - s.p1.x) * i) / 32, s.p1.y + ((s.p2.y - s.p1.y) * i) / 32)));
+      target = { kind: 'line', pts, what: `${it.kind === 'line' ? 'Droite' : 'Segment'} de ${fmt(kmBetween(pts[0], pts[pts.length - 1]), 1)} km sur la carte` };
+    }
+    if (!target) return;
+    // Below twice the precision of the calibration, a search radius means little.
+    const defaultKm = Math.max(0.5, 2 * (g.rms ?? 0.5));
+    await nearbyDialog(target, defaultKm, {
+      place: (spots) => {
+        const g2 = this.georef();
+        if (!g2 || !this.requireLayer()) return;
+        this.addShapes(spots.map((s) => ({ kind: 'point', p: g2.toPx(s.ll), weight: 0, label: s.name })), spots.length > 1 ? 'monuments' : 'lieu');
+        this.status(`${spots.length} point(s) placé(s) dans le calque « ${this.currentLayer!.name} ».`);
+      },
+    });
   }
 
   async toggleGray(): Promise<void> {

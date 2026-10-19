@@ -8,8 +8,9 @@ import { ZOOM_STEP } from '../camera';
 import { fromFileList } from '../io';
 import { unitPerPx } from '../model';
 import * as store from '../store';
+import { knownAnchors } from '../calibrations';
 import { decimalLatLon, dmsLatLon, formatLatLon } from '../geo';
-import { townAt } from '../places';
+import { geoportailUrl, osmUrl, townAt } from '../places';
 import { CALIBRATE_DEF, GEOREF_DEF, TOOLS, type ToolDef } from '../tools';
 import { alertDialog, confirmDialog, openDialog, popupMenu, styleDialog } from './dialogs';
 import { $, fmt, h } from './dom';
@@ -311,6 +312,16 @@ function gpsSection(app: App): HTMLElement {
   pin.classList.toggle('active', app.toolId === 'georef');
   const summary = app.georefSummary().replace(/^Calage GPS : /, '').replace(/ — transformation .*$/, '');
   const content: (Node | null)[] = [h('div', { class: 'map-row' }, pin, h('span', { class: 'gps-summary' }, summary))];
+  const known = app.knownCalibration();
+  if (known) {
+    content.push(h('button', {
+      type: 'button', class: 'small towns-btn', title: `Remplacer les repères par le calage par défaut de cette carte (${known.anchors.length} villes)`,
+      onclick: async () => {
+        if (anchors.length && !(await confirmDialog('Calage par défaut', `Remplacer vos ${anchors.length} repère(s) par le calage par défaut de la carte ${known.name} (${known.anchors.length} villes) ?`, 'Remplacer'))) return;
+        app.setAnchors(knownAnchors(known));
+      },
+    }, `Calage par défaut de cette carte (${known.anchors.length} villes)`));
+  }
   if (g) content.push(h('button', { type: 'button', class: 'small towns-btn', title: 'Placer des points sur des villes données par leur nom, avec des poids', onclick: () => void app.placeTowns() }, 'Placer des villes par leur nom…'));
   if (!anchors.length) {
     content.push(h('p', { class: 'hint' }, 'Placez au moins 3 villes bien réparties (mieux : 6 à 10, jusqu\'aux bords de la carte) pour connaître la position GPS de n\'importe quel point. La précision obtenue est affichée.'));
@@ -328,6 +339,11 @@ function gpsSection(app: App): HTMLElement {
   const sel = app.selectedItems();
   const it = sel.length === 1 ? sel[0].item : null;
   const at = it?.kind === 'point' ? it.p : it?.kind === 'circle' || it?.kind === 'arc' ? it.c : null;
+  if (g && (it?.kind === 'segment' || it?.kind === 'line')) {
+    content.push(h('div', { class: 'gps-point' },
+      h('div', {}, h('b', {}, it.kind === 'line' ? 'Droite sélectionnée' : 'Segment sélectionné')),
+      h('button', { type: 'button', class: 'small', onclick: () => void app.aroundSelection() }, 'Monuments le long de cette droite…')));
+  }
   if (g && at) {
     const ll = g.toLatLon(at);
     const key = decimalLatLon(ll, 4);
@@ -347,9 +363,10 @@ function gpsSection(app: App): HTMLElement {
       h('div', {}, h('b', {}, it!.kind === 'point' ? 'Point : ' : 'Centre : '), formatLatLon(ll)),
       h('div', { class: 'hint' }, dmsLatLon(ll)),
       town,
+      h('button', { type: 'button', class: 'small', title: 'Monuments historiques, lieux-dits et sites alentour', onclick: () => void app.aroundSelection() }, 'Autour de ce point…'),
       h('div', { class: 'map-row' }, copy,
-        link('Géoportail', `https://www.geoportail.gouv.fr/carte?c=${ll.lon.toFixed(5)},${ll.lat.toFixed(5)}&z=14&l0=GEOGRAPHICALGRIDSYSTEMS.MAPS::GEOPORTAIL:OGC:WMTS(1)&permalink=yes`),
-        link('OpenStreetMap', `https://www.openstreetmap.org/?mlat=${ll.lat.toFixed(5)}&mlon=${ll.lon.toFixed(5)}#map=14/${ll.lat.toFixed(5)}/${ll.lon.toFixed(5)}`)),
+        link('Géoportail', geoportailUrl(ll)),
+        link('OpenStreetMap', osmUrl(ll))),
       h('p', { class: 'hint' }, g.rms !== null ? `À ± ${fmt(Math.max(g.rms, 0.1), 1)} km environ, d'après les repères.` : 'Précision inconnue avec 2 repères.')));
   }
   return section('Position GPS', ...content);

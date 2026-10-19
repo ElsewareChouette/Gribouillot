@@ -33,6 +33,9 @@ function chromePath() {
 
 const browser = await chromium.launch({ executablePath: chromePath() });
 const page = await browser.newPage({ viewport: { width: 1800, height: 1300 }, acceptDownloads: true });
+// The monuments the page fetches from the site: the local file instead.
+await page.route('https://elsewarechouette.github.io/Gribouillot/data/merimee.json', (r) =>
+  r.fulfill({ path: resolve(here, '../../public/data/merimee.json'), headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' } }));
 const errors = [];
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 page.on('console', (m) => m.type() === 'error' && errors.push(`console: ${m.text()}`));
@@ -440,6 +443,22 @@ if (Math.abs(linked.r - r2) > 1e-6 || Math.abs(linked.slope - 1) > 1e-6 || !near
 await key('Control+z');
 const undone2 = await A(() => window.gribouillot.currentLayer.items.find((i) => i.kind === 'circle').r);
 if (Math.abs(undone2 - 150) > 1e-6) errors.push(`links: undo gave a radius of ${undone2}`);
+
+// Monuments around a point, amid the anchors A B C D (Mayenne).
+await A(() => {
+  const a = window.gribouillot;
+  a.addShapes([{ kind: 'point', p: { x: 1000, y: 1000 }, weight: 0 }], 'point');
+  a.setTool('select');
+  const items = a.currentLayer.items;
+  a.setSelection([items[items.length - 1].id]);
+});
+await page.getByText('Autour de ce point…').click();
+await page.locator('dialog[open] select').selectOption('10');
+await page.waitForFunction(() => /\d+ monument\(s\) historique/.test(document.querySelector('dialog[open]')?.textContent ?? ''), null, { timeout: 30000 });
+const around = (await page.locator('dialog[open]').innerText()).split('\n').find((l) => /monument\(s\) historique/.test(l));
+const firstLink = await page.locator('dialog[open] .nearby-links a', { hasText: 'Google' }).first().getAttribute('href').catch(() => null);
+if (!/^[1-9]\d* monument/.test(around ?? '') || !firstLink?.startsWith('https://www.google.com/search?q=')) errors.push(`monuments: « ${around} », Google link ${firstLink}`);
+await page.locator('dialog[open] button.primary').click();
 await browser.close();
 
 if (errors.length) {

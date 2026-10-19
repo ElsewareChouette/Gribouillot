@@ -170,3 +170,16 @@ describe('lists of towns', () => {
     expect(townKey('L’Aiguillon')).toBe(townKey("l'aiguillon"));
   });
 });
+
+describe('known maps', () => {
+  it('the Zarquos scan is recognized by its size, and its calibration holds on the 42 reference towns', async () => {
+    const { knownAnchors, knownMap } = await import('../src/calibrations');
+    expect(knownMap({ w: 8460, h: 7569 })).toBeUndefined();
+    const known = knownMap({ w: 8460, h: 7570 })!;
+    const g = fitGeoref(knownAnchors(known))!;
+    const ref = JSON.parse(readFileSync(join(__dirname, 'fixtures/zarquos-989.json'), 'utf8')).anchors as { x: number; y: number; lat: number; lon: number }[];
+    const errs = ref.map((t) => kmBetween(g.toLatLon(pt(t.x, t.y)), t));
+    expect(Math.sqrt(errs.reduce((s, e) => s + e * e, 0) / errs.length)).toBeLessThan(0.7);
+    expect(Math.max(...errs)).toBeLessThan(1.2);
+  });
+});

@@ -117,6 +117,7 @@ export class Session {
     app.cam.bounds = { x: 0, y: 0, w: pic.w, h: pic.h };
     if (fit) app.zoomToFit();
     app.status('');
+    app.applyKnownCalibration(pic);
   }
 
   /* --------------------------------------------------------- projects */
@@ -197,7 +198,8 @@ export class Session {
     await store.saveProject(p);
     void store.requestPersistence();
     await this.open(p, true);
-    this.app.status('Projet créé. Mesurez l\'échelle dans le panneau « Carte » pour obtenir des distances réelles.');
+    // A known map got its calibration and its scale meanwhile (see App.applyKnownCalibration).
+    if (!p.scale.px) this.app.status('Projet créé. Mesurez l\'échelle dans le panneau « Carte » pour obtenir des distances réelles.');
   }
 
   /** Import a desktop project (folder or zip). */
