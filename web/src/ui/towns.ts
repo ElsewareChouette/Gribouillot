@@ -13,17 +13,31 @@ export interface PlacedTown {
   name: string;
   ll: LatLon;
   weight: number;
+  /** The name written on the map, if any (« A »). */
+  label?: string;
 }
 
 const townLabel = (t: Town) => `${t.name} — ${t.dept}${t.population ? ` (${fmt(t.population, 0)} hab.)` : ''}`;
 
 /** `inMap` says whether a position falls on the map. Resolves with the towns to place, or null. */
 export async function townsDialog(inMap: (ll: LatLon) => boolean): Promise<PlacedTown[] | null> {
-  const text = h('textarea', { rows: 8, placeholder: 'Clisson ; 3\nSaint-Pierre (44) 2\nLes Pieux' });
+  const text = h('textarea', { rows: 8, placeholder: 'A = Angers ; 0\nB = Bourges ; 1\nClisson ; 3\nSaint-Pierre (44) 2' });
   const searchBtn = h('button', { type: 'button', class: 'small' }, 'Chercher les communes');
   const progress = h('span', { class: 'hint' });
+  // The 580 way: weight 0 is A, 1 is B…
+  const byWeight = h('button', {
+    type: 'button', class: 'small', title: 'Le nom sur la carte d\'après le poids : 0 → A, 1 → B, 2 → C…', disabled: true,
+    onclick: () => {
+      // Only the towns given a weight.
+      for (const r of rows) {
+        if (r.weight.value.trim() === '') continue;
+        const w = Math.round(parseFloat(r.weight.value));
+        if (w >= 0 && w < 26) r.label.value = String.fromCharCode(65 + w);
+      }
+    },
+  }, 'Nommer d\'après le poids (0 → A, 1 → B…)');
   const table = h('table', { class: 'towns' });
-  type Row = { match: TownMatch; use: HTMLInputElement; pick: HTMLSelectElement | null; weight: HTMLInputElement; tr: HTMLTableRowElement };
+  type Row = { match: TownMatch; use: HTMLInputElement; pick: HTMLSelectElement | null; weight: HTMLInputElement; label: HTMLInputElement; tr: HTMLTableRowElement };
   let rows: Row[] = [];
 
   const stale = (msg: string) => text.setCustomValidity(msg);
@@ -48,11 +62,12 @@ export async function townsDialog(inMap: (ll: LatLon) => boolean): Promise<Place
       if (mine !== round) return;
       rows = matches.map((m) => row(m));
       table.replaceChildren(
-        h('tr', {}, h('th', {}, ''), h('th', {}, 'Saisi'), h('th', {}, 'Commune'), h('th', {}, 'Poids')),
+        h('tr', {}, h('th', {}, ''), h('th', {}, 'Saisi'), h('th', {}, 'Commune'), h('th', {}, 'Poids'), h('th', { title: 'Écrit à côté du point ; vide : rien d\'écrit (la commune reste dans l\'onglet Objet)' }, 'Nom sur la carte')),
         ...rows.map((r) => r.tr),
       );
       const found = rows.filter((r) => r.use.checked).length;
       progress.textContent = `${found} commune(s) à placer sur ${reqs.length}.`;
+      byWeight.disabled = !rows.length;
       stale('');
     } catch (e) {
       if (mine === round) progress.textContent = (e as Error).message;
@@ -67,7 +82,8 @@ export async function townsDialog(inMap: (ll: LatLon) => boolean): Promise<Place
     const c = match.candidates.slice().sort((a, b) => Number(inMap(b)) - Number(inMap(a)) || (b.population ?? 0) - (a.population ?? 0));
     match = { ...match, candidates: c };
     const use = h('input', { type: 'checkbox' });
-    const weight = h('input', { type: 'number', step: 1, min: -999, max: 999, value: String(match.request.weight) });
+    const weight = h('input', { type: 'number', step: 1, min: -999, max: 999, value: match.request.weight === undefined ? '' : String(match.request.weight), placeholder: '0' });
+    const label = h('input', { type: 'text', value: match.request.label ?? '', placeholder: 'aucun', maxlength: 24 });
     const note = h('div', { class: 'hint' });
     let pick: HTMLSelectElement | null = null;
     const cell = h('td');
@@ -83,23 +99,23 @@ export async function townsDialog(inMap: (ll: LatLon) => boolean): Promise<Place
     if (c.length) {
       pick = h('select', {}, ...c.map((t) => h('option', {}, townLabel(t))));
       pick.addEventListener('change', () => {
-        const t = check();
-        use.checked = !!t && inMap(t);
+        use.checked = !!check();
       });
       cell.append(pick);
     } else cell.append(h('span', { class: 'hint' }, 'introuvable'));
     cell.append(note);
+    // Every town found is checked: the notes say which ones deserve a look.
     const t = check();
-    use.checked = !!t && match.exact && inMap(t);
+    use.checked = !!t;
     use.disabled = !t;
-    const tr = h('tr', {}, h('td', {}, use), h('td', {}, match.request.name + (match.request.dept ? ` (${match.request.dept})` : '')), cell, h('td', {}, weight));
-    return { match, use, pick, weight, tr };
+    const tr = h('tr', {}, h('td', {}, use), h('td', {}, match.request.name + (match.request.dept ? ` (${match.request.dept})` : '')), cell, h('td', {}, weight), h('td', {}, label));
+    return { match, use, pick, weight, label, tr };
   }
 
   const body = h('div', { class: 'towns-dlg' },
-    h('p', { class: 'hint' }, 'Une ville par ligne. Ajoutez si besoin son département entre parenthèses, et un poids en fin de ligne : « Clisson ; 3 », « Saint-Pierre (44) 2 ».'),
+    h('p', { class: 'hint' }, 'Une ville par ligne, avec si besoin son département entre parenthèses et un poids en fin de ligne : « Clisson ; 3 », « Saint-Pierre (44) 2 ». Un nom à écrire sur la carte se met devant, avec « = » : « A = Angers ; 0 ». Sans nom, rien n\'est écrit à côté du point : la commune se lit dans l\'onglet Objet.'),
     text,
-    h('div', { class: 'row' }, searchBtn, progress),
+    h('div', { class: 'row' }, searchBtn, progress, h('span', { class: 'spacer' }), byWeight),
     table,
     h('p', { class: 'hint' }, 'Les villes sont placées à la position de leur mairie (geo.api.gouv.fr), reportée sur la carte par le calage GPS : à quelques centaines de mètres près du rond imprimé.'),
   );
@@ -111,6 +127,7 @@ export async function townsDialog(inMap: (ll: LatLon) => boolean): Promise<Place
   return rows.flatMap((r) => {
     const t = r.pick ? r.match.candidates[r.pick.selectedIndex] : undefined;
     if (!r.use.checked || !t) return [];
-    return [{ name: t.name, ll: t, weight: Math.round(parseFloat(r.weight.value) || 0) }];
+    const label = r.label.value.trim();
+    return [{ name: t.name, ll: t, weight: Math.round(parseFloat(r.weight.value) || 0), ...(label ? { label } : {}) }];
   });
 }

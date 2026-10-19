@@ -153,14 +153,20 @@ describe('lists of towns', () => {
   it('names, departments and weights', async () => {
     const { parseTownList } = await import('../src/places');
     expect(parseTownList('Clisson\n  Nantes ; 3\nSaint-Pierre (44) 2\nLes Pieux, -1\n\nBourg-en-Bresse\t12\nPont-l\'Évêque (14)')).toEqual([
-      { name: 'Clisson', weight: 0 },
+      { name: 'Clisson' },
       { name: 'Nantes', weight: 3 },
       { name: 'Saint-Pierre', dept: '44', weight: 2 },
       { name: 'Les Pieux', weight: -1 },
       { name: 'Bourg-en-Bresse', weight: 12 },
-      { name: 'Pont-l\'Évêque', dept: '14', weight: 0 },
+      { name: 'Pont-l\'Évêque', dept: '14' },
     ]);
     expect(parseTownList('Corse (2A) 1')[0]).toEqual({ name: 'Corse', dept: '2A', weight: 1 });
+    // The name to write on the map, before « = » or « : » (the code of the 580).
+    expect(parseTownList('A = Angers ; 0\nB: Bourges 1\nJ=Jarnac (16) 9')).toEqual([
+      { name: 'Angers', weight: 0, label: 'A' },
+      { name: 'Bourges', weight: 1, label: 'B' },
+      { name: 'Jarnac', dept: '16', weight: 9, label: 'J' },
+    ]);
   });
 
   it('comparable names', async () => {

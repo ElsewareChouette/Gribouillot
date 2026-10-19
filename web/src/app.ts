@@ -20,7 +20,7 @@ import { History } from './history';
 import { DEFAULT_UNITS, groundText, paperText, precisionMeters, type LengthContext, type MapUnits } from './units';
 import { clickSource, itemSource, linksFor, propagate, uniqueIds } from './links';
 import { errorPolygon, isLineLike } from './analysis';
-import { freshName, takenNames } from './names';
+import { freshName, nameOf, takenNames } from './names';
 import { centerOf, crossings, remarkablePoints, SNAP_LABELS, type SnapPoint } from './intersections';
 import type { Picture } from './images';
 import { Input } from './input';
@@ -499,7 +499,8 @@ export class App {
     if (this.options.autoNames) {
       const taken = takenNames(this.project!.layers);
       items = items.map((it) => {
-        if (it.kind === 'pixmap' || it.label) return it;
+        // A town keeps no letter of its own: it goes by its name, unless one is given.
+        if (it.kind === 'pixmap' || it.label || it.place) return it;
         const name = freshName(it.kind, taken);
         taken.add(name);
         return { ...it, label: name };
@@ -1018,7 +1019,7 @@ export class App {
     const r = await placeDialog('Point par ses coordonnées');
     if (!r || r === 'delete' || this.georef() !== g) return;
     const p = g.toPx(r.ll);
-    this.addShapes([{ kind: 'point', p, weight: 0, ...(r.name ? { label: r.name } : {}) }], 'point');
+    this.addShapes([{ kind: 'point', p, weight: 0, ...(r.name ? { place: r.name } : {}) }], 'point');
     this.cam.centerOn(p);
     this.viewChanged();
   }
@@ -1039,7 +1040,7 @@ export class App {
     };
     const towns = await townsDialog(inMap);
     if (!towns?.length || this.georef() !== g) return;
-    this.addShapes(towns.map((t) => ({ kind: 'point', p: g.toPx(t.ll), weight: t.weight, label: t.name })), 'villes');
+    this.addShapes(towns.map((t) => ({ kind: 'point', p: g.toPx(t.ll), weight: t.weight, place: t.name, ...(t.label ? { label: t.label } : {}) })), 'villes');
     const weighted = towns.some((t) => t.weight !== 0);
     this.status(`${towns.length} ville(s) placée(s) dans le calque « ${layer.name} ».${weighted && !this.options.weights ? ' Affichage → « Afficher les poids » pour voir les poids.' : ''}`);
   }
@@ -1051,7 +1052,7 @@ export class App {
     const it = sel.length === 1 ? sel[0].item : null;
     if (!g || !it) return;
     let target: Around | null = null;
-    if (it.kind === 'point') target = { kind: 'point', ll: g.toLatLon(it.p), what: it.label ? `Point « ${it.label} »` : 'Point sélectionné' };
+    if (it.kind === 'point') target = { kind: 'point', ll: g.toLatLon(it.p), what: it.label || it.place ? `Point « ${nameOf(it)} »` : 'Point sélectionné' };
     else if (it.kind === 'circle' || it.kind === 'arc') target = { kind: 'point', ll: g.toLatLon(it.c), what: 'Centre du cercle sélectionné' };
     else if (it.kind === 'segment' || it.kind === 'line') {
       // A line is followed across the map only: the calibration means nothing beyond.
@@ -1068,7 +1069,7 @@ export class App {
       place: (spots) => {
         const g2 = this.georef();
         if (!g2 || !this.requireLayer()) return;
-        this.addShapes(spots.map((s) => ({ kind: 'point', p: g2.toPx(s.ll), weight: 0, label: s.name })), spots.length > 1 ? 'monuments' : 'lieu');
+        this.addShapes(spots.map((s) => ({ kind: 'point', p: g2.toPx(s.ll), weight: 0, place: s.name })), spots.length > 1 ? 'monuments' : 'lieu');
         this.status(`${spots.length} point(s) placé(s) dans le calque « ${this.currentLayer!.name} ».`);
       },
     });

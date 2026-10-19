@@ -34,7 +34,8 @@ export function takenNames(layers: Layer[]): Set<string> {
 /** What to call an item in a sentence. */
 export function nameOf(it: Item): string {
   if (it.kind === 'pixmap') return `image ${it.file}`;
-  return it.label || `${ITEM_LABELS[it.kind]} sans nom`;
+  if (it.label && it.place) return `${it.label} (${it.place})`;
+  return it.label || it.place || `${ITEM_LABELS[it.kind]} sans nom`;
 }
 
 type Find = (id: string) => Item | undefined;

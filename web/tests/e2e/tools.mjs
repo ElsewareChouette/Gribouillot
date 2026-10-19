@@ -485,6 +485,12 @@ await page.getByRole('tab', { name: /Calques|Énigmes/ }).click();
 await page.locator('.step', { hasText: '470' }).click();
 const enigma = await A(() => ({ layer: window.gribouillot.currentLayer.name, rank: window.gribouillot.currentRank(), steps: [...document.querySelectorAll('.step')].map((b) => b.textContent).join(' ') }));
 if (enigma.layer !== '470 constructions' || enigma.rank !== 2 || enigma.steps !== '530 780 470 580 600 500 420 560 650 520') errors.push(`énigmes: ${JSON.stringify(enigma)}`);
+// Another layer in the 470, by its button.
+await page.getByRole('button', { name: '+ Ajouter un calque' }).first().click();
+await page.locator('dialog[open] button.primary').click(); // the name proposed
+await page.waitForTimeout(100);
+const added = await A(() => ({ layer: window.gribouillot.currentLayer.name, rank: window.gribouillot.currentRank(), shown: [...document.querySelectorAll('section.enigma.current .layers .name')].map((n) => n.textContent) }));
+if (added.layer !== '470 points' || added.rank !== 2 || !added.shown.includes('470 points')) errors.push(`énigmes: adding a layer gave ${JSON.stringify(added)}`);
 await browser.close();
 
 if (errors.length) {

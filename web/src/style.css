@@ -350,6 +350,7 @@ table.towns th { text-align: left; color: var(--muted); font-weight: 600; paddin
 table.towns td { padding: 3px 4px; border-top: 1px solid var(--line); vertical-align: top; }
 table.towns select { max-width: 320px; }
 table.towns input[type=number] { width: 5em; }
+table.towns input[type=text] { width: 6em; }
 table.towns .hint { margin: 2px 0 0; }
 
 /* Around a point */
@@ -396,11 +397,9 @@ section.enigma.others { border-left-color: var(--line); padding-bottom: 8px; }
 .enigma-head .fold { width: 22px; height: 22px; color: var(--muted); }
 section.enigma ul.layers { margin: 0 6px 6px; }
 section.enigma > .hint, section.enigma > .layer-actions { margin: 0 8px 6px; }
-.enigma-actions { display: flex; align-items: center; gap: 4px; margin: 0 8px 6px; }
+.enigma-actions { display: flex; align-items: center; gap: 4px; margin: 0 8px 8px; }
+.add-sub { border-style: dashed; }
 .enigma-actions input[type=color] { width: 30px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; }
-.enigma-text { margin: 0 8px 8px; font-size: 12px; }
-.enigma-text summary { cursor: pointer; color: var(--muted); }
-.enigma-text textarea { width: 100%; margin-top: 4px; font: inherit; font-size: 13px; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: inherit; resize: vertical; }
 .enigma-offer { margin-top: 14px; padding: 10px; border: 1px dashed var(--accent); border-radius: 8px; }
 .enigma-offer p { margin: 0 0 8px; font-size: 13px; }
 .layer-extra select { flex-basis: 100%; width: 100%; min-width: 0; font-size: 12px; margin-top: 2px; }
@@ -412,3 +411,5 @@ ul.layers li { min-width: 0; }
 .insp-chain summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 ul.chain { list-style: none; margin: 4px 0 0; padding-left: 12px; border-left: 1px dotted var(--line); font-size: 12px; }
 ul.chain li { margin: 3px 0; }
+.insp-place { margin: -4px 0 0; font-size: 13px; }
+.insp-place .k { color: var(--muted); }

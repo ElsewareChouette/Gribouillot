@@ -18,6 +18,8 @@ interface Stroke {
   width: number; // screen pixels, whatever the zoom ("cosmetic" pen)
   /** Its name (« A », « Bourges », « d1 »), shown on the map. Ignored by the desktop version. */
   label?: string;
+  /** The place it stands for (a town placed by its name), not written on the map. Ignored by the desktop version. */
+  place?: string;
   /** A free note on it: a quote of the énigme, a madit, a doubt. Ignored by the desktop version. */
   note?: string;
   /** How the item was built, to build it again when what it depends on moves (see links.ts). */
@@ -192,6 +194,9 @@ export function formatLength(px: number, scale: MapScale, digits = 1): string {
   if (!k) return `${px.toFixed(0)} px`;
   return `${(px * k).toFixed(digits)} ${scale.unit}`;
 }
+
+/** Diameter of a point on screen, in pixels, whatever its pen width and the zoom. */
+export const POINT_SIZE = 10;
 
 export const ITEM_LABELS: Record<ItemKind, string> = {
   point: 'point',

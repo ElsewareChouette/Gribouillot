@@ -64,7 +64,9 @@ export function refreshOptions(app: App): void {
       p.width = parseInt(width.value, 10);
       app.changed();
     });
-    bar.append(h('span', { class: 'opt-sep' }), color, width);
+    // A point is always 10 px wide: its width does not show.
+    bar.append(h('span', { class: 'opt-sep' }), color);
+    if (app.toolId !== 'point') bar.append(width);
   }
   const extra: HTMLElement[] = [];
   if (draws || app.snaps()) extra.push(toggle('Aimanter', 'Accrocher les clics aux intersections, milieux, extrémités et centres (toujours aux points)', app.options.snapFigures, () => app.toggleOption('snapFigures')));

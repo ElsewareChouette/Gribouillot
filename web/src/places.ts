@@ -58,11 +58,14 @@ export function searchTowns(name: string, limit = 8, dept?: string): Promise<Tow
 
 /* ===================================================== lists of towns */
 
-/** A line of a list of towns: « Clisson », « Clisson ; 3 », « Saint-Pierre (44) 2 ». */
+/** A line of a list of towns: « Clisson », « Clisson ; 3 », « Saint-Pierre (44) 2 », « A = Angers ; 0 ». */
 export interface TownRequest {
   name: string;
   dept?: string;
-  weight: number;
+  /** The weight typed, if any. */
+  weight?: number;
+  /** The name written on the map (« A »), when given before « = » or « : ». */
+  label?: string;
 }
 
 /** Read a list of towns, one per line, with an optional department and weight. */
@@ -71,7 +74,13 @@ export function parseTownList(text: string): TownRequest[] {
   for (const raw of text.split(/\r?\n/)) {
     let line = raw.trim();
     if (!line) continue;
-    let weight = 0;
+    let label: string | undefined;
+    const named = /^([^=:]{1,12}?)\s*[=:]\s*(.+)$/.exec(line);
+    if (named) {
+      label = named[1].trim();
+      line = named[2].trim();
+    }
+    let weight: number | undefined;
     // The weight: the last number, after a separator or a space.
     const w = /(?:^|[\s;,\t])(-?\d+)\s*$/.exec(line);
     if (w && line.slice(0, w.index).trim()) {
@@ -85,7 +94,7 @@ export function parseTownList(text: string): TownRequest[] {
       dept = d[1].toUpperCase().padStart(2, '0');
       line = (line.slice(0, d.index) + line.slice(d.index + d[0].length)).trim();
     }
-    if (line) out.push({ name: line, dept, weight });
+    if (line) out.push({ name: line, dept, ...(weight !== undefined ? { weight } : {}), ...(label ? { label } : {}) });
   }
   return out;
 }

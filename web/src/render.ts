@@ -8,7 +8,7 @@
 import type { Camera } from './camera';
 import { deg2rad, mid, angleOf, seg, type Pt, type Rect } from './geom';
 import type { Picture } from './images';
-import type { Item, Layer, PixmapItem } from './model';
+import { POINT_SIZE, type Item, type Layer, type PixmapItem } from './model';
 import { pixmapCorners, spiralArcs } from './shapes';
 
 export interface StrokeStyle {
@@ -181,7 +181,7 @@ export class Renderer {
     const s: StrokeStyle = { color: it.color, width: it.width, alpha: a };
     switch (it.kind) {
       case 'point':
-        this.point(it.p, it.color, it.width, a);
+        this.point(it.p, it.color, POINT_SIZE, a);
         if (opts.showWeight && it.weight !== 0) this.text(it.p, String(it.weight), { color: it.color, size: 20, bold: true, dx: 7, dy: 16 });
         if (it.label && opts.showNames !== false) this.text(it.p, it.label, { color: it.color, size: 13, bold: true, dx: 7, dy: -6 });
         break;
@@ -197,7 +197,7 @@ export class Renderer {
         // Selection halo of a point: a disc around it.
         const c = this.cam.toScreen(it.p);
         this.ctx.beginPath();
-        this.ctx.arc(c.x, c.y, Math.max(it.width, 3) / 2 + 5, 0, Math.PI * 2);
+        this.ctx.arc(c.x, c.y, POINT_SIZE / 2 + 5, 0, Math.PI * 2);
         this.ctx.fillStyle = s.color;
         this.ctx.fill();
         break;

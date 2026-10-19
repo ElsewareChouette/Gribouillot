@@ -5,7 +5,7 @@
 
 import type { App } from '../app';
 import { knownAnchors } from '../calibrations';
-import { SUBLAYERS } from '../enigmas';
+import { layerName, SUBLAYERS } from '../enigmas';
 import { unitPerPx, type Group, type Layer } from '../model';
 import { CALIBRATE_DEF, GEOREF_DEF } from '../tools';
 import { confirmDialog, promptText } from './dialogs';
@@ -91,8 +91,10 @@ export function refreshPanel(app: App, force = false): void {
   }, tabLabel(app, id, label), id === 'object' && n ? h('span', { class: 'badge' }, String(n)) : null)));
 
   const active = document.activeElement;
-  // Don't rebuild while the user is typing in a field of the panel, or moving a slider.
-  if (!force && active && body.contains(active) && (active.tagName === 'INPUT' || active.tagName === 'SELECT' || active.tagName === 'TEXTAREA')) return;
+  // Don't rebuild while the user is typing in a field of the panel, or moving a slider
+  // (a list or a color picker, once chosen, may be rebuilt: what it changed must show).
+  const typing = active instanceof HTMLTextAreaElement || (active instanceof HTMLInputElement && ['text', 'search', 'number', 'range'].includes(active.type));
+  if (!force && typing && body.contains(active)) return;
   body.replaceChildren();
   if (!p) return;
   if (tab === 'layers') body.append(layersTab(app));
@@ -209,23 +211,21 @@ function enigmasTab(app: App, groups: Group[]): HTMLElement {
     const box = h('section', { class: `enigma${current ? ' current' : ''}${later ? ' later' : ''}`, style: `--g:${g.color}` }, head);
     if (open) {
       const list = h('ul', { class: 'layers' }, ...layers.map((l) => layerRow(app, l, undefined, groups)));
-      const sub = h('select', { title: 'Ajouter un calque à cette énigme' },
-        h('option', { value: '' }, '+ calque…'), ...SUBLAYERS.map((n) => h('option', { value: n }, n)), h('option', { value: '*' }, 'autre nom…'));
-      sub.addEventListener('change', async () => {
-        let name = sub.value;
-        if (name === '*') name = (await promptText('Nouveau calque', `Calque de l'énigme ${g.code}`, 'hypothèse C')) ?? '';
-        if (name) app.addGroupLayer(g.id, name);
-        else sub.value = '';
-      });
-      const text = h('textarea', { rows: 4, placeholder: 'Collez ici le texte de l\'énigme.' }, g.text);
-      text.addEventListener('change', () => app.updateGroup(g.id, { text: text.value }));
-      const notes = h('textarea', { rows: 3, placeholder: 'Ce que j\'en retiens, mes doutes, les madits…' }, g.notes);
-      notes.addEventListener('change', () => app.updateGroup(g.id, { notes: notes.value }));
+      const add = h('button', {
+        type: 'button', class: 'small add-sub', title: `Ajouter un calque à l'énigme ${g.code}`,
+        onclick: async () => {
+          // The first usual name not taken yet in this énigme.
+          const taken = new Set(layers.map((l) => l.name));
+          const suggestion = SUBLAYERS.find((n) => !taken.has(layerName(g, n))) ?? `calque ${layers.length + 1}`;
+          const name = await promptText('Nouveau calque', `Nom du calque (il commencera par « ${g.code} »)`, suggestion, 'Par exemple : points, constructions, annotations, hypothèse A, hypothèse B…');
+          if (name) app.addGroupLayer(g.id, name.replace(new RegExp(`^${g.code}\\s*`), '') || suggestion);
+        },
+      }, '+ Ajouter un calque');
       const color = h('input', { type: 'color', value: g.color, title: 'Couleur de l\'énigme (celle de ses nouveaux tracés)' });
       color.addEventListener('change', () => app.updateGroup(g.id, { color: color.value }));
       box.append(
-        list.children.length ? list : h('p', { class: 'hint' }, 'Aucun calque : cliquez l\'énigme pour en créer un.'),
-        h('div', { class: 'enigma-actions' }, sub, color,
+        list.children.length ? list : h('p', { class: 'hint' }, 'Aucun calque pour l\'instant.'),
+        h('div', { class: 'enigma-actions' }, add, color,
           h('button', { type: 'button', class: 'icon-btn', title: 'Plus tôt dans l\'ordre', disabled: i === 0, onclick: () => app.moveGroup(g.id, -1) }, '↑'),
           h('button', { type: 'button', class: 'icon-btn', title: 'Plus tard dans l\'ordre', disabled: i === groups.length - 1, onclick: () => app.moveGroup(g.id, 1) }, '↓'),
           h('span', { class: 'spacer' }),
@@ -235,8 +235,6 @@ function enigmasTab(app: App, groups: Group[]): HTMLElement {
               if (await confirmDialog('Retirer l\'énigme', `Retirer le groupe ${g.code} ? Ses ${layers.length} calque(s) restent, hors énigme.`, 'Retirer')) app.deleteGroup(g.id);
             },
           }, 'Retirer')),
-        h('details', { class: 'enigma-text', open: !!g.text && current }, h('summary', {}, 'Texte de l\'énigme'), text),
-        h('details', { class: 'enigma-text', open: !!g.notes && current }, h('summary', {}, 'Ce que j\'en retiens'), notes),
       );
     }
     out.append(box);

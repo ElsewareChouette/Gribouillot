@@ -20,6 +20,7 @@ de la version Qt (`<projet>.grib`, un `<calque>.xml` par calque, la carte et les
   GPS, alentours, annotation, style ; et pour plusieurs objets : triangle d'erreur, traversée des
   zones) et **Carte** (fond, échelle, unités, nord, calage GPS).
 - Les nouveaux objets sont **nommés** (A, B…, d1, c1…) ; les noms des points s'affichent.
+- Les points font toujours 10 pixels à l'écran, quelle que soit l'épaisseur (gardée dans le fichier pour la version bureau).
 
 ## Développement
 
@@ -113,8 +114,11 @@ seulement, 0,6 km sur les 32 autres. Ce scan fait 128,5 m par pixel, pas 127.
 
 Édition → *Placer des villes par leur nom* : une liste de communes, une par ligne, avec si
 besoin le département entre parenthèses et un poids (« Clisson ; 3 », « Saint-Pierre (44) 2 »).
-Chaque nom est vérifié (homonymes au choix, noms approchés signalés), puis la commune est placée
-à la position de sa mairie, avec son nom affiché à côté du point.
+Chaque nom est vérifié (homonymes au choix, noms approchés et villes hors carte signalés, toutes
+les communes trouvées cochées), puis la commune est placée à la position de sa mairie. Son nom
+reste dans l'objet (onglet Objet, Ctrl+K, constructions) sans être écrit sur la carte ; pour y
+écrire un nom, le mettre devant avec « = » (`A = Angers ; 0`), dans la colonne « Nom sur la
+carte », ou par « Nommer d'après le poids » (0 → A, 1 → B…, le code de la 580).
 
 Un point (ou un cercle) sélectionné : *Autour de ce point…* liste les monuments historiques à
 moins de 0,25 à 20 km, filtrables par nature (église, croix, dolmen…), par date de protection
@@ -154,8 +158,8 @@ tracés restent, sans lien).
 **Énigmes.** On travaille par énigmes par défaut : un nouveau projet commence dans la 530, et
 un projet qui n'en a jamais eu (venu de la version bureau) est rangé par énigmes à
 l'ouverture, ses calques « 500 … » dans la 500, les autres hors énigme. Un groupe de calques par énigme (530,
-780, 470, 580, 600, 500, 420, 560, 650, 520), avec sa couleur (celle des nouveaux tracés), le
-texte de l'énigme et « ce que j'en retiens ». Un clic sur une énigme du bandeau y fait
+780, 470, 580, 600, 500, 420, 560, 650, 520), avec sa couleur (celle des nouveaux tracés) ;
+« + Ajouter un calque » en crée un autre dans l'énigme (points, hypothèse A…). Un clic sur une énigme du bandeau y fait
 travailler ; *état à cette énigme* masque les suivantes. En dessinant dans une énigme, on ne
 s'accroche pas aux objets des énigmes suivantes. L'ordre se change (↑ ↓). Les groupes sont dans
 le `.web.json` ; la version bureau voit des calques ordinaires (« 500 constructions »).

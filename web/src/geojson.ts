@@ -79,6 +79,7 @@ export function toGeoJSON(layers: Layer[], groups: Group[], g: Georef, map: Rect
       const properties: Record<string, string | number> = { name: nameOf(it), type: ITEM_LABELS[it.kind], layer: layer.name, color: it.color };
       if (group) properties.enigme = `${group.code} ${group.title}`;
       if (it.note) properties.note = it.note;
+      if (it.place) properties.place = it.place;
       if (it.link) {
         const r = recipeText(it.link, find, len);
         if (r) properties.construction = r;

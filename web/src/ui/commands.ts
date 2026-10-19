@@ -93,9 +93,9 @@ function everything(app: App, base: Command[]): Command[] {
     for (const l of app.project.layers) out.push({ group: 'Calque', label: l.name, run: () => app.setCurrentLayer(l.id), words: 'calque' });
     for (const l of app.project.layers) {
       for (const it of l.items) {
-        if (it.kind === 'pixmap' || !it.label) continue;
+        if (it.kind === 'pixmap' || (!it.label && !it.place)) continue;
         out.push({
-          group: 'Objet', label: `${nameOf(it)} — ${ITEM_LABELS[it.kind]}, ${l.name}`, words: `${it.label} ${it.note ?? ''}`,
+          group: 'Objet', label: `${nameOf(it)} — ${ITEM_LABELS[it.kind]}, ${l.name}`, words: `${it.label ?? ''} ${it.place ?? ''} ${it.note ?? ''}`,
           run: () => {
             app.setTool('select');
             app.setSelection([it.id]);

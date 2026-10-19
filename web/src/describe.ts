@@ -34,7 +34,7 @@ export function describeSelection(
 function describeOne(it: Item, len: (px: number) => string, gpsOf: (p: Pt, what?: string) => string, between: (a: Pt, b: Pt) => string): string {
   switch (it.kind) {
     case 'point':
-      return `${it.label ? `${it.label} : point` : 'Point'} (${fmt(it.p.x, 1)} ; ${fmt(it.p.y, 1)})${gpsOf(it.p)}${it.weight ? `, poids ${it.weight}` : ''} — [W] : changer le poids`;
+      return `${it.label || it.place ? `${[it.label, it.place && `(${it.place})`].filter(Boolean).join(' ')} : point` : 'Point'} (${fmt(it.p.x, 1)} ; ${fmt(it.p.y, 1)})${gpsOf(it.p)}${it.weight ? `, poids ${it.weight}` : ''} — [W] : changer le poids`;
     case 'segment':
       return `Segment de longueur ${between(it.p1, it.p2)}`;
     case 'line':

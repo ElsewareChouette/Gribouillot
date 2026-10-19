@@ -397,6 +397,7 @@ function readWebAttrs(it: Item, a: Record<string, string>): void {
   if (a.wid) it.id = a.wid;
   if (a.label && it.kind !== 'pixmap') it.label = a.label;
   if (a.note && it.kind !== 'pixmap') it.note = a.note;
+  if (a.place && it.kind !== 'pixmap') it.place = a.place;
   if (a.link && it.kind !== 'pixmap') {
     try {
       const link = JSON.parse(a.link) as Link;
@@ -411,6 +412,7 @@ function webAttrs(it: Item): [string, string][] {
   const out: [string, string][] = [['wid', it.id]];
   if (it.kind !== 'pixmap' && it.label) out.push(['label', it.label]);
   if (it.kind !== 'pixmap' && it.note) out.push(['note', it.note]);
+  if (it.kind !== 'pixmap' && it.place) out.push(['place', it.place]);
   if (it.kind !== 'pixmap' && it.link) out.push(['link', JSON.stringify(it.link)]);
   return out;
 }

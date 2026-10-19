@@ -9,7 +9,7 @@ import type { App } from '../app';
 import { isItem, isPt, type Draft, type Input, type Recipe, type Shape, type Step } from '../constructions';
 import { samePt, seg, type Pt } from '../geom';
 import { clickSource, itemSource } from '../links';
-import type { Item, Source, StrokeItem } from '../model';
+import { POINT_SIZE, type Item, type Source, type StrokeItem } from '../model';
 import type { Renderer, StrokeStyle } from '../render';
 import { ArcSpanTracker } from '../shapes';
 import { alertDialog, promptNumber } from '../ui/dialogs';
@@ -247,7 +247,7 @@ export class ConstructionTool extends Tool {
     if (step.take === 'angle') inputs.push(this.tracker.span);
     const p = app.project!;
     const style = this.style(app);
-    if (rec.markers) for (const q of this.inputs) if (isPt(q)) r.point(q, p.color, 5, 0.8);
+    if (rec.markers) for (const q of this.inputs) if (isPt(q)) r.point(q, p.color, POINT_SIZE, 0.8);
     if (inputs.length === rec.steps.length) {
       const res = rec.build(inputs);
       if (!('fail' in res)) for (const s of res.shapes) drawShape(r, s, style);
@@ -269,6 +269,6 @@ export class ConstructionTool extends Tool {
 }
 
 function drawShape(r: Renderer, s: Shape, style: StrokeStyle): void {
-  if (s.kind === 'point') r.point(s.p, style.color, 5, 0.8);
+  if (s.kind === 'point') r.point(s.p, style.color, POINT_SIZE, 0.8);
   else r.outline({ ...s, id: '', color: style.color, width: style.width } as Exclude<Item, { kind: 'pixmap' }>, style);
 }

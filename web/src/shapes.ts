@@ -25,7 +25,7 @@ import {
   type Rect,
   type Seg,
 } from './geom';
-import type { ArcItem, Item, PixmapItem } from './model';
+import { POINT_SIZE, type ArcItem, type Item, type PixmapItem } from './model';
 
 /* --------------------------------------------------------------- spiral */
 
@@ -192,7 +192,7 @@ function ellipseDistance(p: Pt, f1: Pt, f2: Pt, dSum: number): number {
 export function itemDistance(item: Item, p: Pt, zoom: number, sizeOf: (file: string) => ImageSize | undefined): number {
   switch (item.kind) {
     case 'point':
-      return Math.max(0, dist(p, item.p) * zoom - Math.max(item.width, 3) / 2);
+      return Math.max(0, dist(p, item.p) * zoom - POINT_SIZE / 2);
     case 'segment':
     case 'line':
       return distToSegment(p, item.p1, item.p2) * zoom;

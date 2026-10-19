@@ -81,6 +81,7 @@ function one(app: App, it: Item, editable: boolean, layerName: string): HTMLElem
     name.addEventListener('change', () => app.updateItem(it.id, { label: name.value.trim() || undefined }, 'renommer'));
     name.addEventListener('keydown', (e) => e.key === 'Enter' && name.blur());
     out.append(h('div', { class: 'insp-head' }, h('span', { class: 'kind' }, ITEM_LABELS[it.kind]), name));
+    if (it.place) out.append(h('p', { class: 'insp-place' }, h('span', { class: 'k' }, 'Lieu '), h('b', {}, it.place), h('span', { class: 'hint' }, it.label ? '' : ' — non écrit sur la carte : donnez-lui un nom ci-dessus pour l\'y écrire')));
   } else out.append(h('div', { class: 'insp-head' }, h('b', {}, `Image ${it.file}`)));
   if (!editable) {
     out.append(h('p', { class: 'hint readonly' }, `Calque « ${layerName} » : en lecture seule. `,
@@ -192,7 +193,7 @@ function one(app: App, it: Item, editable: boolean, layerName: string): HTMLElem
     color.addEventListener('change', () => app.restyle([it.id], { color: color.value }));
     const width = h('select', { title: 'Épaisseur' }, ...[...new Set([...WIDTHS, it.width])].sort((a, b) => a - b).map((w) => h('option', { value: String(w), selected: w === it.width }, `${w} px`)));
     width.addEventListener('change', () => app.restyle([it.id], { width: parseInt(width.value, 10) }));
-    const styleRow = h('div', { class: 'insp-actions' }, color, width);
+    const styleRow = h('div', { class: 'insp-actions' }, color, it.kind === 'point' ? null : width);
     if (it.kind === 'point') {
       const w = h('input', { type: 'number', step: 1, min: -999, max: 999, value: String(it.weight), title: 'Poids du point (centre de masse)' });
       w.style.width = '5em';
