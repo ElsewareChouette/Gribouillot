@@ -188,6 +188,17 @@ describe('known maps', () => {
     expect(Math.sqrt(errs.reduce((s, e) => s + e * e, 0) / errs.length)).toBeLessThan(0.7);
     expect(Math.max(...errs)).toBeLessThan(1.2);
   });
+
+  it('the 168,2 m map is recognized by its size, and its 17 towns hold to half a kilometer', async () => {
+    const { knownAnchors, knownMap } = await import('../src/calibrations');
+    expect(knownMap({ w: 6576, h: 6223 })).toBeUndefined();
+    const known = knownMap({ w: 6576, h: 6224 })!;
+    expect(known.name).toBe('carte_chouette_168.2m');
+    const g = fitGeoref(knownAnchors(known))!;
+    expect(g.model).toBe('similarity'); // a clean scan: no shear, no bend to correct
+    expect(g.rms!).toBeLessThan(0.5);
+    expect(g.max!).toBeLessThan(0.8);
+  });
 });
 
 describe('on the ground', () => {

@@ -68,7 +68,7 @@ export function actions(app: App, shortcuts: () => void, about: () => void, proj
     { group: 'Affichage', label: 'Zoom avant', key: '+', run: () => app.zoom(ZOOM_STEP), disabled: none },
     { group: 'Affichage', label: 'Zoom arrière', key: '−', run: () => app.zoom(1 / ZOOM_STEP), disabled: none },
     { group: 'Affichage', label: 'Noms des points sur la carte', checked: o.showNames, run: () => app.toggleOption('showNames'), words: 'étiquettes' },
-    { group: 'Affichage', label: 'Nommer les nouveaux objets (A, B…, d1…)', checked: o.autoNames, run: () => app.toggleOption('autoNames') },
+    { group: 'Affichage', label: 'Nommer les nouvelles figures (d1, c1…)', checked: o.autoNames, run: () => app.toggleOption('autoNames') },
     { group: 'Affichage', label: 'Poids des points (afficher et demander)', checked: o.weights, run: () => app.toggleOption('weights') },
     { group: 'Affichage', label: 'Aimanter aux intersections, milieux et centres', checked: o.snapFigures, run: () => app.toggleOption('snapFigures') },
     { group: 'Affichage', label: 'Placer le centre des cercles et arcs', checked: o.drawCenter, run: () => app.toggleOption('drawCenter') },

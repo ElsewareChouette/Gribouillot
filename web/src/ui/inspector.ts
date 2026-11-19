@@ -12,6 +12,7 @@ import { decimalLatLon, dmsLatLon, formatLatLon, meridianAngle } from '../geo';
 import { dist, mid, type Pt } from '../geom';
 import { ITEM_LABELS, isStroke, type Item } from '../model';
 import { googleUrl } from '../monuments';
+import { colorPopup } from './dialogs';
 import { builtOn, nameOf, recipeText, usedBy } from '../names';
 import { geoportailUrl, osmUrl, townAt } from '../places';
 import { arcLength } from '../shapes';
@@ -189,8 +190,13 @@ function one(app: App, it: Item, editable: boolean, layerName: string): HTMLElem
 
   /* Style */
   if (isStroke(it) && editable) {
-    const color = h('input', { type: 'color', value: it.color, title: 'Couleur' });
-    color.addEventListener('change', () => app.restyle([it.id], { color: color.value }));
+    const color: HTMLButtonElement = h('button', {
+      type: 'button', class: 'opt-color', title: 'Couleur',
+      onclick: async () => {
+        const c = await colorPopup(color, it.color);
+        if (c && c !== it.color) app.restyle([it.id], { color: c });
+      },
+    }, h('span', { class: 'swatch', style: `background:${it.color}` }));
     const width = h('select', { title: 'Épaisseur' }, ...[...new Set([...WIDTHS, it.width])].sort((a, b) => a - b).map((w) => h('option', { value: String(w), selected: w === it.width }, `${w} px`)));
     width.addEventListener('change', () => app.restyle([it.id], { width: parseInt(width.value, 10) }));
     const styleRow = h('div', { class: 'insp-actions' }, color, it.kind === 'point' ? null : width);

@@ -2,8 +2,9 @@
  * Names of the objects, and what they are made of, in words:
  * « Perpendiculaire à d1 passant par C ».
  *
- * New objects get a short name, as in GeoGebra: points A, B, C…, lines
- * d1, d2…, segments s1…, circles c1…, arcs a1…, ellipses e1…
+ * New figures get a short name, as in GeoGebra: lines d1, d2…, segments s1…,
+ * circles c1…, arcs a1…, ellipses e1… Points get none: their name is written
+ * on the map, so it is the user who names the few that deserve it.
  */
 
 import { fmt } from './ui/dom';
@@ -11,16 +12,8 @@ import { ITEM_LABELS, type Item, type Layer, type Link, type Source, type Stroke
 
 const PREFIX: Partial<Record<Item['kind'], string>> = { line: 'd', segment: 's', circle: 'c', arc: 'a', ellipse: 'e', spiral: 'sp' };
 
-/** The first free name for a new item of this kind. */
-export function freshName(kind: Item['kind'], taken: Set<string>): string {
-  if (kind === 'point') {
-    for (let n = 0; ; n++) {
-      for (let c = 0; c < 26; c++) {
-        const name = String.fromCharCode(65 + c) + (n ? String(n) : '');
-        if (!taken.has(name)) return name;
-      }
-    }
-  }
+/** The first free name for a new figure of this kind (points are left unnamed). */
+export function freshName(kind: Exclude<Item['kind'], 'point' | 'pixmap'>, taken: Set<string>): string {
   const p = PREFIX[kind] ?? 'o';
   for (let n = 1; ; n++) if (!taken.has(`${p}${n}`)) return `${p}${n}`;
 }

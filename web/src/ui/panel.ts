@@ -1,28 +1,24 @@
 /**
- * The side panel, in 3 tabs: the layers, the selected object (inspector.ts)
- * and the map (background, scale, GPS calibration).
+ * The side panel, in 2 tabs: the layers with the selected object below them
+ * (inspector.ts), and the map (background, scale, GPS calibration).
  */
 
 import type { App } from '../app';
 import { knownAnchors } from '../calibrations';
-import { layerName, SUBLAYERS } from '../enigmas';
+import { groupOf, layerName, SUBLAYERS } from '../enigmas';
 import { unitPerPx, type Group, type Layer } from '../model';
 import { CALIBRATE_DEF, GEOREF_DEF } from '../tools';
-import { confirmDialog, promptText } from './dialogs';
+import { colorPopup, confirmDialog, popupMenu, promptText } from './dialogs';
 import { $, fmt, h } from './dom';
 import { icon } from './icons';
 import { inspector } from './inspector';
 
-type Tab = 'layers' | 'object' | 'map';
-const TABS: [Tab, string][] = [['layers', 'Calques'], ['object', 'Objet'], ['map', 'Carte']];
-const tabLabel = (app: App, t: Tab, label: string) => (t === 'layers' && app.groups().length ? 'Énigmes' : label);
-
+type Tab = 'layers' | 'map';
 let tab: Tab = 'layers';
-/** The tab to go back to when the selection is emptied. */
-let before: Tab = 'layers';
-let lastSelection = 0;
 let tabsEl: HTMLElement;
 let body: HTMLElement;
+/** The selection the panel showed last, to bring a newly selected object into view. */
+let shownSelection = '';
 
 const WIDTH_KEY = 'gribouillot.panelWidth';
 const MIN_WIDTH = 300, MAX_WIDTH = 720;
@@ -71,35 +67,61 @@ export function buildPanel(app: App): void {
 
 export function showTab(app: App, t: Tab): void {
   tab = t;
-  if (t !== 'object') before = t;
   refreshPanel(app, true);
 }
 
+/** What the map still lacks: without its scale the measures are in pixels, without its calibration no GPS. */
+function missingOnMap(app: App): string[] {
+  const p = app.project!;
+  return [p.mapFile ? null : 'carte', unitPerPx(p.scale) ? null : 'échelle', app.georef() ? null : 'calage GPS'].filter((x): x is string => !!x);
+}
+
+/**
+ * The panel, in 2 tabs: the layers of the énigme with the selected object
+ * below them, and the map (scale, units, GPS calibration).
+ */
 export function refreshPanel(app: App, force = false): void {
   const p = app.project;
-  // Selecting an object shows it; emptying the selection goes back.
-  const n = app.selection.size;
-  if (n && !lastSelection && tab !== 'object') {
-    before = tab;
-    tab = 'object';
-  } else if (!n && lastSelection && tab === 'object') tab = before;
-  lastSelection = n;
-
-  tabsEl.replaceChildren(...TABS.map(([id, label]) => h('button', {
+  // Selecting an object shows it, under the layers.
+  const selection = [...app.selection].join(' ');
+  const fresh = !!selection && selection !== shownSelection;
+  shownSelection = selection;
+  if (fresh && tab === 'map' && app.toolId !== 'georef' && app.toolId !== 'calibrate') tab = 'layers';
+  const missing = p ? missingOnMap(app) : [];
+  const tabs: [Tab, string, Node | null][] = [
+    ['layers', p && app.groups().length ? 'Énigmes' : 'Calques', null],
+    ['map', 'Carte', missing.length ? h('span', { class: 'todo', title: `À renseigner : ${missing.join(', ')}` }, '!') : null],
+  ];
+  tabsEl.replaceChildren(...tabs.map(([id, label, mark]) => h('button', {
     type: 'button', role: 'tab', class: `tab${tab === id ? ' on' : ''}`, 'aria-selected': String(tab === id),
     onclick: () => showTab(app, id),
-  }, tabLabel(app, id, label), id === 'object' && n ? h('span', { class: 'badge' }, String(n)) : null)));
+  }, label, mark)));
 
   const active = document.activeElement;
   // Don't rebuild while the user is typing in a field of the panel, or moving a slider
   // (a list or a color picker, once chosen, may be rebuilt: what it changed must show).
   const typing = active instanceof HTMLTextAreaElement || (active instanceof HTMLInputElement && ['text', 'search', 'number', 'range'].includes(active.type));
   if (!force && typing && body.contains(active)) return;
+  const scroll = body.scrollTop;
   body.replaceChildren();
   if (!p) return;
-  if (tab === 'layers') body.append(layersTab(app));
-  else if (tab === 'object') body.append(inspector(app));
-  else body.append(mapTab(app));
+  if (tab === 'map') {
+    body.append(mapTab(app));
+    body.scrollTop = scroll;
+    return;
+  }
+  const object = objectSection(app);
+  body.append(layersTab(app), object);
+  body.scrollTop = scroll;
+  // A newly selected object is brought into view, if it is below what shows.
+  if (fresh && object.offsetTop - body.offsetTop > scroll + body.clientHeight - 120) object.scrollIntoView({ block: 'start' });
+}
+
+function objectSection(app: App): HTMLElement {
+  const n = app.selection.size;
+  return h('section', { class: 'object' },
+    h('div', { class: 'layer-head' }, h('h3', {}, 'Objet'), n > 1 ? h('span', { class: 'badge' }, String(n)) : null),
+    n ? inspector(app) : h('p', { class: 'hint' }, 'Cliquez un objet de la carte (outil Sélection, J) pour voir ici sa construction, ses mesures et sa position GPS. Ctrl+K retrouve un objet par son nom.'));
 }
 
 /* =============================================================== layers */
@@ -107,59 +129,117 @@ export function refreshPanel(app: App, force = false): void {
 /** Set right after a reorder drag, so that it does not count as a click. */
 let justDragged = false;
 
-/** A row of the layer list; the current layer shows its opacity, rename and delete. */
-function layerRow(app: App, l: Layer, drag?: (row: HTMLElement, e: PointerEvent) => void, groups?: Group[]): HTMLElement {
+/** The « ⋯ » button of a row or of a heading: what is seldom needed is behind it. */
+function moreButton(title: string, open: (btn: HTMLElement) => unknown): HTMLButtonElement {
+  const btn: HTMLButtonElement = h('button', {
+    type: 'button', class: 'icon-btn more', title, 'aria-label': title, 'aria-haspopup': 'menu',
+    onclick: (e: Event) => {
+      e.stopPropagation();
+      void open(btn);
+    },
+  }, '⋯');
+  btn.addEventListener('dblclick', (e) => e.stopPropagation());
+  return btn;
+}
+
+/** A menu under a « ⋯ » button, each entry with what it does. */
+async function moreMenu(btn: HTMLElement, entries: ([string, () => unknown] | null)[]): Promise<void> {
+  const list = entries.filter((e): e is [string, () => unknown] => !!e);
+  const r = btn.getBoundingClientRect();
+  const chosen = await popupMenu(r.right - 220, r.bottom + 2, list.map(([label], value) => ({ label, value })));
+  if (chosen !== null) void list[chosen][1]();
+}
+
+/** What is done to a layer now and then: its opacity, its name, its énigme, its removal. */
+function layerPopover(app: App, l: Layer, btn: HTMLElement, groups: Group[]): void {
+  const r = btn.getBoundingClientRect();
+  const pop = h('div', { class: 'popup-menu layer-pop', role: 'menu' });
+  const close = () => {
+    pop.remove();
+    window.removeEventListener('pointerdown', outside, true);
+    window.removeEventListener('keydown', esc, true);
+  };
+  const outside = (e: Event) => {
+    if (!pop.contains(e.target as Node)) close();
+  };
+  const esc = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    close();
+  };
+  const entry = (label: string, run: () => unknown, cls = '') => h('button', {
+    type: 'button', role: 'menuitem', class: cls,
+    onclick: () => {
+      close();
+      void run();
+    },
+  }, label);
+  const op = h('input', { type: 'range', min: 0, max: 100, value: String(l.opacity), 'aria-label': 'Opacité du calque' });
+  const opv = h('span', { class: 'opv' }, `${l.opacity} %`);
+  op.addEventListener('input', () => {
+    opv.textContent = `${op.value} %`;
+    app.setLayerOpacity(l.id, parseInt(op.value, 10));
+  });
+  pop.append(
+    h('label', { class: 'pop-opacity' }, h('span', {}, 'Opacité'), op, opv),
+    entry('Renommer…', () => app.renameLayer(l.id)));
+  if (groups.length) {
+    pop.append(entry('Changer d\'énigme…', async () => {
+      const inside = groupOf(groups, l.id);
+      const chosen = await popupMenu(r.right - 220, r.bottom + 2, [
+        ...groups.map((g) => ({ label: `${g.id === inside?.id ? '✓ ' : '   '}${g.code}  ${g.title}`, value: g.id })),
+        { label: `${inside ? '   ' : '✓ '}Hors énigme`, value: '' },
+      ]);
+      // null: the menu was closed without a choice.
+      if (chosen !== null && chosen !== (inside?.id ?? '')) app.setLayerGroup(l.id, chosen || null);
+    }));
+  }
+  pop.append(entry('Supprimer', () => app.deleteLayer(l.id), 'danger'));
+  document.body.append(pop);
+  const size = pop.getBoundingClientRect();
+  pop.style.left = `${Math.max(4, Math.min(r.right - size.width, window.innerWidth - size.width - 4))}px`;
+  pop.style.top = `${Math.max(4, Math.min(r.bottom + 2, window.innerHeight - size.height - 4))}px`;
+  setTimeout(() => {
+    window.addEventListener('pointerdown', outside, true);
+    window.addEventListener('keydown', esc, true);
+  });
+}
+
+/**
+ * A row of the layer list: its eye, its name, and behind « ⋯ » the rest
+ * (opacity, rename, énigme, delete). A click makes it the current layer.
+ */
+function layerRow(app: App, l: Layer, groups: Group[], drag?: (row: HTMLElement, e: PointerEvent) => void): HTMLElement {
   const current = l.id === app.currentLayerId;
   const eye = h('button', { type: 'button', class: 'icon-btn', title: l.visible ? 'Masquer le calque' : 'Afficher le calque', onclick: (e: Event) => { e.stopPropagation(); app.toggleLayerVisibility(l.id); } },
     h('img', { src: icon(l.visible ? 'visibility-on.png' : 'visibility-off.png'), alt: '' }));
-  const name = h('span', { class: 'name', title: 'Double-clic pour renommer' }, l.name);
-  const count = h('span', { class: 'count', title: `${l.items.length} élément(s)` }, String(l.items.length));
-  const grip = drag ? h('span', { class: 'grip', title: 'Glisser vers le haut ou le bas pour réordonner' }, '⋮⋮') : null;
+  const name = h('span', { class: 'name' }, l.name);
+  const facts = [l.opacity < 100 ? `${l.opacity} %` : '', l.items.length ? String(l.items.length) : ''].filter(Boolean).join(' · ');
+  const count = h('span', { class: 'count', title: `${l.items.length} élément(s), opacité ${l.opacity} %` }, facts);
+  const more = moreButton(`Calque « ${l.name} » : opacité, renommer, supprimer…`, (btn) => layerPopover(app, l, btn, groups));
   const row = h('li', {
     class: current ? 'current' : '',
+    title: current ? 'Le calque où l\'on dessine' : 'Cliquer pour dessiner dans ce calque',
     onclick: () => {
       if (!justDragged) app.setCurrentLayer(l.id);
     },
     ondblclick: () => void app.renameLayer(l.id),
-  }, grip, eye, name, count);
-  if (drag) for (const handle of [grip!, name]) handle.addEventListener('pointerdown', (e) => drag(row, e));
-  if (!l.visible) row.classList.add('hidden-layer');
-  if (current) {
-    const op = h('input', { type: 'range', min: 0, max: 100, value: String(l.opacity), title: 'Opacité du calque' });
-    const opv = h('span', { class: 'opv' }, `${l.opacity} %`);
-    op.addEventListener('input', () => {
-      opv.textContent = `${op.value} %`;
-      app.setLayerOpacity(l.id, parseInt(op.value, 10));
-    });
-    op.addEventListener('change', () => {
-      // End of the move: let the panel refresh again.
-      op.blur();
-      app.onChange();
-    });
-    op.addEventListener('click', (e) => e.stopPropagation());
-    const del = h('button', { type: 'button', class: 'icon-btn', title: 'Supprimer le calque', onclick: (e: Event) => { e.stopPropagation(); void app.deleteLayer(l.id); } },
-      h('img', { src: icon('delete-layer.png'), alt: '' }));
-    const ren = h('button', { type: 'button', class: 'icon-btn pencil', title: 'Renommer le calque', onclick: (e: Event) => { e.stopPropagation(); void app.renameLayer(l.id); } }, '✎');
-    const extra = h('div', { class: 'layer-extra' }, h('span', {}, 'Opacité'), op, opv, ren, del);
-    if (groups?.length) {
-      // Move the layer into an énigme, or out of them.
-      const into = h('select', { title: 'Énigme de ce calque', onclick: (e: Event) => e.stopPropagation() },
-        h('option', { value: '' }, 'hors énigme'),
-        ...groups.map((g) => h('option', { value: g.id, selected: g.layerIds.includes(l.id) }, `${g.code} ${g.title}`)));
-      into.addEventListener('change', () => app.setLayerGroup(l.id, into.value || null));
-      extra.append(into);
-    }
-    row.append(extra);
+  }, eye, name, count, more);
+  if (drag) {
+    row.classList.add('draggable');
+    name.addEventListener('pointerdown', (e) => drag(row, e));
   }
+  if (!l.visible) row.classList.add('hidden-layer');
   return row;
 }
 
-function layerActions(app: App): HTMLElement {
-  const addBtn = h('button', { type: 'button', class: 'add-layer', onclick: () => app.addLayer() }, h('img', { src: icon('add-layer.png'), alt: '' }), 'Nouveau calque');
-  return h('div', { class: 'layer-actions' }, addBtn,
-    h('button', { type: 'button', class: 'small', title: 'Importer un fichier de calque (.xml) de Gribouillot', onclick: () => void app.pickLayerFiles() }, 'Importer un calque…'),
-    h('button', { type: 'button', class: 'small', title: 'Ajouter une image dans le calque courant', onclick: () => void app.addPicture() }, 'Image…'));
-}
+const addButton = (title: string, onclick: () => unknown) => h('button', { type: 'button', class: 'add-layer', title, onclick: () => void onclick() }, '+ Calque');
+
+/** What the layers have in common, behind the « ⋯ » of their heading. */
+const importEntries = (app: App): [string, () => unknown][] => [
+  ['Importer un calque (.xml)…', () => app.pickLayerFiles()],
+  ['Ajouter une image dans le calque courant…', () => app.addPicture()],
+];
 
 function layersTab(app: App): HTMLElement {
   const p = app.project!;
@@ -170,81 +250,65 @@ function layersTab(app: App): HTMLElement {
   // Top of the list = drawn last (on top), like layer panels of drawing software.
   for (let i = layers.length - 1; i >= 0; i--) {
     const l = layers[i];
-    list.append(layerRow(app, l, (row, e) => reorderDrag(app, list, row, layers.length, l.id, e)));
+    list.append(layerRow(app, l, groups, (row, e) => reorderDrag(app, list, row, layers.length, l.id, e)));
   }
   return h('div', {},
-    list,
-    layerActions(app),
-    h('p', { class: 'hint' }, 'On dessine dans le calque surligné. Les objets des autres calques servent de référence mais ne sont pas modifiables.'),
-    h('div', { class: 'enigma-offer' },
-      h('p', {}, 'Travailler énigme par énigme, dans l\'ordre du jeu (530 → 520) : un groupe de calques par énigme, avec son texte, vos notes et sa couleur.'),
-      h('button', { type: 'button', class: 'small primary-soft', onclick: () => app.createEnigmaGroups() }, 'Organiser par énigmes')));
+    h('section', {},
+      h('div', { class: 'layer-head' },
+        h('h3', { title: 'On dessine dans le calque surligné ; les objets des autres servent de référence. Glisser un calque pour changer l\'ordre.' }, 'Calques'),
+        moreButton('Importer, organiser par énigmes…', (btn) => moreMenu(btn, [
+          ...importEntries(app),
+          ['Organiser par énigmes (530 → 520)', () => app.createEnigmaGroups()],
+        ]))),
+      list,
+      addButton('Nouveau calque, au-dessus du calque courant', () => app.addLayer())));
 }
-
-/** Énigmes opened in the panel (the current one is always open). */
-const opened = new Set<string>();
 
 function enigmasTab(app: App, groups: Group[]): HTMLElement {
   const p = app.project!;
   const rank = app.currentRank();
+  const g = groups[rank];
   const out = h('div', { class: 'enigmas' });
-  groups.forEach((g, i) => {
-    const current = i === rank;
-    const open = current || opened.has(g.id);
+  if (g) {
+    // Only the énigme being worked on: the others are one click away, in the strip above the map.
     const layers = p.layers.filter((l) => g.layerIds.includes(l.id)).reverse();
-    const items = layers.reduce((n, l) => n + l.items.length, 0);
-    const later = app.untilRank !== null && i > app.untilRank;
-    const head = h('div', { class: 'enigma-head', onclick: () => app.openGroup(g.id) },
-      h('span', { class: 'rank', style: `background:${g.color}` }, String(i + 1)),
-      h('b', {}, g.code),
-      h('span', { class: 'title', title: g.title }, g.title),
-      h('span', { class: 'count', title: `${layers.length} calque(s), ${items} objet(s)` }, items ? String(items) : ''),
-      h('button', {
-        type: 'button', class: 'icon-btn fold', title: open ? 'Replier' : 'Déplier', 'aria-expanded': String(open),
-        onclick: (e: Event) => {
-          e.stopPropagation();
-          if (opened.has(g.id)) opened.delete(g.id);
-          else opened.add(g.id);
-          refreshPanel(app, true);
-        },
-      }, open ? '▾' : '▸'));
-    const box = h('section', { class: `enigma${current ? ' current' : ''}${later ? ' later' : ''}`, style: `--g:${g.color}` }, head);
-    if (open) {
-      const list = h('ul', { class: 'layers' }, ...layers.map((l) => layerRow(app, l, undefined, groups)));
-      const add = h('button', {
-        type: 'button', class: 'small add-sub', title: `Ajouter un calque à l'énigme ${g.code}`,
-        onclick: async () => {
-          // The first usual name not taken yet in this énigme.
-          const taken = new Set(layers.map((l) => l.name));
-          const suggestion = SUBLAYERS.find((n) => !taken.has(layerName(g, n))) ?? `calque ${layers.length + 1}`;
-          const name = await promptText('Nouveau calque', `Nom du calque (il commencera par « ${g.code} »)`, suggestion, 'Par exemple : points, constructions, annotations, hypothèse A, hypothèse B…');
-          if (name) app.addGroupLayer(g.id, name.replace(new RegExp(`^${g.code}\\s*`), '') || suggestion);
-        },
-      }, '+ Ajouter un calque');
-      const color = h('input', { type: 'color', value: g.color, title: 'Couleur de l\'énigme (celle de ses nouveaux tracés)' });
-      color.addEventListener('change', () => app.updateGroup(g.id, { color: color.value }));
-      box.append(
-        list.children.length ? list : h('p', { class: 'hint' }, 'Aucun calque pour l\'instant.'),
-        h('div', { class: 'enigma-actions' }, add, color,
-          h('button', { type: 'button', class: 'icon-btn', title: 'Plus tôt dans l\'ordre', disabled: i === 0, onclick: () => app.moveGroup(g.id, -1) }, '↑'),
-          h('button', { type: 'button', class: 'icon-btn', title: 'Plus tard dans l\'ordre', disabled: i === groups.length - 1, onclick: () => app.moveGroup(g.id, 1) }, '↓'),
-          h('span', { class: 'spacer' }),
-          h('button', {
-            type: 'button', class: 'small danger', title: 'Retirer ce groupe (ses calques restent, hors énigme)',
-            onclick: async () => {
-              if (await confirmDialog('Retirer l\'énigme', `Retirer le groupe ${g.code} ? Ses ${layers.length} calque(s) restent, hors énigme.`, 'Retirer')) app.deleteGroup(g.id);
-            },
-          }, 'Retirer')),
-      );
-    }
-    out.append(box);
-  });
-  const others = p.layers.filter((l) => !groups.some((g) => g.layerIds.includes(l.id))).reverse();
-  out.append(h('section', { class: 'enigma others' },
-    h('div', { class: 'enigma-head static' }, h('b', {}, 'Hors énigme'), h('span', { class: 'title' }, 'cartes, repères, essais : visibles à toutes les étapes')),
-    others.length ? h('ul', { class: 'layers' }, ...others.map((l) => layerRow(app, l, undefined, groups))) : null,
-    layerActions(app)));
-  out.append(h('p', { class: 'hint' }, 'Une énigme s\'appuie sur les précédentes, jamais sur les suivantes : leurs objets ne s\'accrochent pas quand on dessine. On dessine dans le calque surligné, de la couleur de son énigme.'));
+    const add = async () => {
+      // The first usual name not taken yet in this énigme.
+      const taken = new Set(layers.map((l) => l.name));
+      const suggestion = SUBLAYERS.find((n) => !taken.has(layerName(g, n))) ?? `calque ${layers.length + 1}`;
+      const name = await promptText('Nouveau calque', `Nom du calque (il commencera par « ${g.code} »)`, suggestion, 'Par exemple : points, constructions, annotations, hypothèse A, hypothèse B…');
+      if (name) app.addGroupLayer(g.id, name.replace(new RegExp(`^${g.code}\\s*`), '') || suggestion);
+    };
+    out.append(h('section', { class: 'enigma current', style: `--g:${g.color}` },
+      h('div', { class: 'layer-head' },
+        h('button', {
+          type: 'button', class: 'code', title: 'Couleur de l\'énigme (celle de ses nouveaux tracés) : cliquer pour la changer',
+          onclick: async (e: Event) => {
+            const c = await colorPopup(e.currentTarget as HTMLElement, g.color);
+            if (c && c !== g.color) app.updateGroup(g.id, { color: c });
+          },
+        }, g.code),
+        h('span', { class: 'title', title: `Énigme ${rank + 1} sur ${groups.length}. Elle s'appuie sur les précédentes, jamais sur les suivantes : leurs objets ne s'accrochent pas quand on dessine.` }, g.title),
+        moreButton(`Énigme ${g.code} : ordre, retirer…`, (btn) => moreMenu(btn, [
+          rank > 0 ? ['Plus tôt dans l\'ordre du jeu', () => app.moveGroup(g.id, -1)] : null,
+          rank < groups.length - 1 ? ['Plus tard dans l\'ordre du jeu', () => app.moveGroup(g.id, 1)] : null,
+          ['Retirer cette énigme (ses calques restent)…', async () => {
+            if (await confirmDialog('Retirer l\'énigme', `Retirer le groupe ${g.code} ? Ses ${layers.length} calque(s) restent, hors énigme.`, 'Retirer')) app.deleteGroup(g.id);
+          }],
+        ]))),
+      h('ul', { class: 'layers' }, ...layers.map((l) => layerRow(app, l, groups))),
+      addButton(`Ajouter un calque à l'énigme ${g.code} (points, hypothèse A…)`, add)));
+  } else {
+    out.append(h('section', { class: 'enigma' },
+      h('p', { class: 'hint' }, 'Le calque courant est hors énigme. Pour travailler une énigme, cliquez-la dans le bandeau au-dessus de la carte.')));
+  }
+  const others = p.layers.filter((l) => !groups.some((x) => x.layerIds.includes(l.id))).reverse();
+  out.append(h('section', { class: 'others' },
+    h('div', { class: 'layer-head' },
+      h('h3', { title: 'Cartes, repères, essais : visibles à toutes les étapes' }, 'Hors énigme'),
+      moreButton('Importer un calque, une image…', (btn) => moreMenu(btn, importEntries(app)))),
+    others.length ? h('ul', { class: 'layers' }, ...others.map((l) => layerRow(app, l, groups))) : null,
+    addButton('Nouveau calque hors énigme (visible à toutes les étapes)', () => app.addLayer())));
   return out;
 }
 

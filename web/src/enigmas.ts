@@ -7,19 +7,30 @@
 import type { Group, Layer } from './model';
 import { newId } from './model';
 
-/** The énigmes in the order of the game (given by the B), with the color of their wavelength. */
+/**
+ * The énigmes in the order of the game (given by the B), with the color of their wavelength,
+ * darkened: a light stroke (yellow, orange) is lost on a colorful map.
+ */
 export const ENIGMAS: { code: string; title: string; color: string }[] = [
-  { code: '530', title: 'Ouverture', color: '#2e9e3a' },
+  { code: '530', title: 'Ouverture', color: '#1b7a2a' },
   { code: '780', title: 'Premier pas…', color: '#a3164e' },
-  { code: '470', title: 'Ce n\'est le bon chemin que si la flèche vise le cœur', color: '#1f5fd6' },
-  { code: '580', title: 'Le bon sens, c\'est le sens du contresens, et inversement', color: '#c9a400' },
-  { code: '600', title: 'Quand Al-Mar s\'allie à la fibule de Préneste…', color: '#ef7d00' },
-  { code: '500', title: 'Ut queant laxis', color: '#0097a7' },
-  { code: '420', title: 'Du ciel vient la lumière', color: '#7a2fd0' },
-  { code: '560', title: 'Ad augusta per angusta', color: '#8aa800' },
-  { code: '650', title: 'Quand tout est révélé', color: '#e01b1b' },
-  { code: '520', title: 'La terre s\'ouvre', color: '#24a37a' },
+  { code: '470', title: 'Ce n\'est le bon chemin que si la flèche vise le cœur', color: '#1a4fc0' },
+  { code: '580', title: 'Le bon sens, c\'est le sens du contresens, et inversement', color: '#8a6d00' },
+  { code: '600', title: 'Quand Al-Mar s\'allie à la fibule de Préneste…', color: '#b85000' },
+  { code: '500', title: 'Ut queant laxis', color: '#00707d' },
+  { code: '420', title: 'Du ciel vient la lumière', color: '#6a23bd' },
+  { code: '560', title: 'Ad augusta per angusta', color: '#5f7a00' },
+  { code: '650', title: 'Quand tout est révélé', color: '#c01414' },
+  { code: '520', title: 'La terre s\'ouvre', color: '#0f7a5a' },
 ];
+
+/** The lighter colors the énigmes had at first, and the dark one that replaces each. */
+const FORMER_COLORS: Record<string, string> = { '#2e9e3a': '#1b7a2a', '#1f5fd6': '#1a4fc0', '#c9a400': '#8a6d00', '#ef7d00': '#b85000', '#0097a7': '#00707d', '#7a2fd0': '#6a23bd', '#8aa800': '#5f7a00', '#e01b1b': '#c01414', '#24a37a': '#0f7a5a' };
+
+/** The groups, those still in their former light color taking the dark one (a color chosen by the user is kept). */
+export function darkened(groups: Group[]): Group[] {
+  return groups.map((g) => (FORMER_COLORS[g.color.toLowerCase()] ? { ...g, color: FORMER_COLORS[g.color.toLowerCase()] } : g));
+}
 
 /** Ready-made names of the layers of a group. */
 export const SUBLAYERS = ['points', 'constructions', 'annotations', 'hypothèse A', 'hypothèse B'];

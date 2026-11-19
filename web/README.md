@@ -15,11 +15,15 @@ de la version Qt (`<projet>.grib`, un `<calque>.xml` par calque, la carte et les
 - **À gauche**, 7 outils : Sélection, Vue, Point, Droite, Cercle, Arc, Mesure. Leurs variantes
   (13 droites, 7 cercles, report de distance…) sont dans la **barre d'options** au-dessus de
   la carte, avec la couleur, l'épaisseur et les réglages utiles à l'outil.
-- **À droite** (400 px, réglable en glissant son bord), 3 onglets : **Énigmes** (ou Calques), **Objet** (tout sur la sélection : nom,
-  construction et chaîne de dépendances, mesures carte et terrain, azimuts, précision, position
-  GPS, alentours, annotation, style ; et pour plusieurs objets : triangle d'erreur, traversée des
-  zones) et **Carte** (fond, échelle, unités, nord, calage GPS).
-- Les nouveaux objets sont **nommés** (A, B…, d1, c1…) ; les noms des points s'affichent.
+- **À droite** (400 px, réglable en glissant son bord), 2 onglets : **Énigmes** (ou Calques : les calques de
+  l'énigme en cours et ceux hors énigme, un clic pour y dessiner ; opacité, renommer, changer d'énigme, supprimer,
+  importer sont derrière les « ⋯ » ; et, en dessous, l'**Objet** sélectionné : nom, construction et chaîne de
+  dépendances, mesures carte et terrain, azimuts, précision, position GPS, alentours, annotation, style ; pour
+  plusieurs objets : triangle d'erreur, traversée des zones) et **Carte** (fond, échelle, unités, nord, calage
+  GPS ; un « ! » sur l'onglet tant qu'il y manque quelque chose). À l'ouverture d'une carte sans échelle, une
+  boîte la demande (la saisir, ou la mesurer sur la carte).
+- Les nouvelles figures sont **nommées** (d1, c1…) ; les points restent sans nom — leur nom
+  s'écrit sur la carte, donc on le donne soi-même (panneau Objet) quand il sert.
 - Les points font toujours 10 pixels à l'écran, quelle que soit l'épaisseur (gardée dans le fichier pour la version bureau).
 
 ## Développement
@@ -65,7 +69,7 @@ version bureau (`../resources/icons`). Le déploiement sur GitHub Pages est fait
 | `src/enigmas.ts` | les énigmes : groupes de calques dans l'ordre du jeu, règles (pas de référence vers une énigme suivante) |
 | `src/analysis.ts` | triangle d'erreur, traversée des zones |
 | `src/geojson.ts` | export des tracés en coordonnées GPS |
-| `src/calibrations.ts` | cartes connues (scan Zarquos de la 989) : calage et échelle par défaut |
+| `src/calibrations.ts` | cartes connues (scan Zarquos de la 989, carte 168,2 m) : calage et échelle par défaut |
 | `src/describe.ts` | texte de la barre d'état sur la sélection (longueurs, angles) |
 | `src/render.ts` | rendu Canvas (épaisseurs indépendantes du zoom) |
 | `src/images.ts` | images décodées + copies réduites pour les très grandes cartes |
@@ -116,7 +120,7 @@ seulement, 0,6 km sur les 32 autres. Ce scan fait 128,5 m par pixel, pas 127.
 besoin le département entre parenthèses et un poids (« Clisson ; 3 », « Saint-Pierre (44) 2 »).
 Chaque nom est vérifié (homonymes au choix, noms approchés et villes hors carte signalés, toutes
 les communes trouvées cochées), puis la commune est placée à la position de sa mairie. Son nom
-reste dans l'objet (onglet Objet, Ctrl+K, constructions) sans être écrit sur la carte ; pour y
+reste dans l'objet (panneau Objet, Ctrl+K, constructions) sans être écrit sur la carte ; pour y
 écrire un nom, le mettre devant avec « = » (`A = Angers ; 0`), dans la colonne « Nom sur la
 carte », ou par « Nommer d'après le poids » (0 → A, 1 → B…, le code de la 580).
 
@@ -135,7 +139,10 @@ disque la prend sur le site.
 Cartes connues (`src/calibrations.ts`) : une carte reconnue à sa taille exacte reçoit son calage
 par défaut quand le projet n'en a pas, ainsi que son échelle si elle n'est pas définie. C'est le
 cas du scan Zarquos de la 989 (8460 × 7570 px, 31 villes calées par l'utilisateur : 0,5 km
-d'écart typique). Le panneau propose de revenir à ce calage par défaut.
+d'écart typique) et de la carte `carte_chouette_168.2m` (6576 × 6224 px, 17 villes : 0,4 km
+d'écart typique, 0,7 km au pire ; une similitude suffit, et le pixel y vaut 170,0 m mesurés,
+et non les 168,2 m du nom de l'image). Le panneau
+propose de revenir à ce calage par défaut.
 
 Les repères sont exportés à côté du `.grib`, dans `<projet>.web.json`, que la version bureau
 ignore.
@@ -159,9 +166,10 @@ tracés restent, sans lien).
 un projet qui n'en a jamais eu (venu de la version bureau) est rangé par énigmes à
 l'ouverture, ses calques « 500 … » dans la 500, les autres hors énigme. Un groupe de calques par énigme (530,
 780, 470, 580, 600, 500, 420, 560, 650, 520), avec sa couleur (celle des nouveaux tracés) ;
-« + Ajouter un calque » en crée un autre dans l'énigme (points, hypothèse A…). Un clic sur une énigme du bandeau y fait
-travailler ; *état à cette énigme* masque les suivantes. En dessinant dans une énigme, on ne
-s'accroche pas aux objets des énigmes suivantes. L'ordre se change (↑ ↓). Les groupes sont dans
+« + Calque » en crée un autre dans l'énigme (points, hypothèse A…). Un clic sur une énigme du bandeau y fait
+travailler : le panneau n'affiche que ses calques ; *état à cette énigme* masque les suivantes. En dessinant dans une énigme, on ne
+s'accroche pas aux objets des énigmes suivantes. L'ordre se change (« ⋯ » de l'énigme), sa couleur aussi (clic sur sa pastille). Les couleurs proposées sont toutes sombres
+(`src/colors.ts`) : un trait clair se perd sur une carte colorée. Les groupes sont dans
 le `.web.json` ; la version bureau voit des calques ordinaires (« 500 constructions »).
 
 **Unités.** Les tracés se font sur la feuille, à l'échelle de la carte (1 px = 127 m pour le

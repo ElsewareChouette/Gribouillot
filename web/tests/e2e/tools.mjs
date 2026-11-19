@@ -65,6 +65,8 @@ await page.getByText('Nouveau projet à partir').click();
 await (await chooser).setFiles({ name: 'carte.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') });
 await fill('Test outils');
 await page.waitForFunction(() => window.gribouillot.pictures.size > 0);
+// A map without a scale: it is asked. Later.
+await page.locator('dialog[open]').getByRole('button', { name: 'Plus tard' }).click();
 // A fixed view, so that screen positions map to known scene positions.
 await A(() => {
   const a = window.gribouillot;
@@ -303,8 +305,9 @@ await step('undo x2 + redo', async () => {
 
 // Layer opacity and visibility are undoable, the slider is one undo step.
 const opacity = () => A(() => window.gribouillot.currentLayer.opacity);
-await page.getByRole('tab', { name: /Calques|Énigmes/ }).click();
-const slider = await page.locator('.layer-extra input[type=range]').boundingBox();
+// The opacity is behind the « ⋯ » of the layer.
+await page.locator('.layers li.current .more').click();
+const slider = await page.locator('.layer-pop input[type=range]').boundingBox();
 await page.mouse.move(slider.x + slider.width - 2, slider.y + slider.height / 2);
 await page.mouse.down();
 await page.mouse.move(slider.x + slider.width * 0.6, slider.y + slider.height / 2, { steps: 5 });
@@ -481,12 +484,11 @@ if (picked !== 'perpendicular') errors.push(`palette: Ctrl+K « perpendic » gav
 // The énigmes: in the order of the game, a layer for the one opened.
 await key('Escape');
 await A(() => window.gribouillot.setSelection([]));
-await page.getByRole('tab', { name: /Calques|Énigmes/ }).click();
 await page.locator('.step', { hasText: '470' }).click();
 const enigma = await A(() => ({ layer: window.gribouillot.currentLayer.name, rank: window.gribouillot.currentRank(), steps: [...document.querySelectorAll('.step')].map((b) => b.textContent).join(' ') }));
 if (enigma.layer !== '470 constructions' || enigma.rank !== 2 || enigma.steps !== '530 780 470 580 600 500 420 560 650 520') errors.push(`énigmes: ${JSON.stringify(enigma)}`);
 // Another layer in the 470, by its button.
-await page.getByRole('button', { name: '+ Ajouter un calque' }).first().click();
+await page.locator('section.enigma.current .add-layer').click();
 await page.locator('dialog[open] button.primary').click(); // the name proposed
 await page.waitForTimeout(100);
 const added = await A(() => ({ layer: window.gribouillot.currentLayer.name, rank: window.gribouillot.currentRank(), shown: [...document.querySelectorAll('section.enigma.current .layers .name')].map((n) => n.textContent) }));

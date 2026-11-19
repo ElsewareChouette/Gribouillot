@@ -11,7 +11,7 @@ import { download, exportProjectZip, importProject, isImageName, mimeOf, safeFil
 import { emptyLayer, emptyProject, type Project } from './model';
 import { Renderer } from './render';
 import { toGeoJSON } from './geojson';
-import { organizeByEnigmas } from './enigmas';
+import { darkened, organizeByEnigmas } from './enigmas';
 import * as store from './store';
 import { alertDialog, confirmDialog, openDialog, promptText } from './ui/dialogs';
 import { h, pickFiles } from './ui/dom';
@@ -120,6 +120,8 @@ export class Session {
     if (fit) app.zoomToFit();
     app.status('');
     app.applyKnownCalibration(pic);
+    // No scale (the map is not a known one): ask for it.
+    void app.askScale();
   }
 
   /* --------------------------------------------------------- projects */
@@ -129,6 +131,7 @@ export class Session {
     await this.closeProject(false);
     // Work by énigmes by default: a project that never had them gets them (not one whose groups were removed).
     if (project.groups === undefined) project.groups = organizeByEnigmas(project.layers);
+    else project.groups = darkened(project.groups);
     app.project = project;
     app.currentLayerId = project.layers[project.layers.length - 1]?.id ?? null;
     store.setLastProjectId(project.id);
@@ -207,7 +210,7 @@ export class Session {
     void store.requestPersistence();
     await this.open(p, true);
     // A known map got its calibration and its scale meanwhile (see App.applyKnownCalibration).
-    if (!p.scale.px) this.app.status('Projet créé. Mesurez l\'échelle dans le panneau « Carte » pour obtenir des distances réelles.');
+    if (!p.scale.px) this.app.status('Projet créé. Mesurez l\'échelle dans l\'onglet « Carte » pour obtenir des distances réelles.');
   }
 
   /** Import a desktop project (folder or zip). */

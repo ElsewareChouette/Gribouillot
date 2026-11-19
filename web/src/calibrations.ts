@@ -59,6 +59,36 @@ export const KNOWN_MAPS: KnownMap[] = [
       ["Casteljaloux", 3308.24, 5860.96, 44.3136, 0.0883],
     ],
   },
+  {
+    // Calibrated by the user on 2026-10-19 (17 towns, project « carte_chouette_168.2m »):
+    // 0.4 km typical error, 0.7 km at worst, and a mere similarity fits — a clean scan.
+    name: 'carte_chouette_168.2m',
+    w: 6576,
+    h: 6224,
+    // Measured, not taken from the name of the picture: the 17 towns give 170.0 m per pixel
+    // (± 0.1 over the 67 pairs more than 3000 px apart, as much east-west as north-south),
+    // where the name says 168.2 — 1 % short, which is 10 km over the width of France.
+    mPerPx: 170,
+    anchors: [
+      ["Collioure", 3868.78, 5727.84, 42.5256, 3.0832],
+      ["Ustaritz", 1704.84, 5116.40, 43.3957, -1.4541],
+      ["Seebach", 5941.63, 1430.75, 48.9704, 7.9882],
+      ["Sancoins", 3769.71, 2915.78, 46.8309, 2.9197],
+      ["Wormhout", 3562.40, 262.69, 50.8826, 2.4678],
+      ["Roquestéron", 5718.97, 4783.70, 43.8739, 7.0057],
+      ["Le Poiré-sur-Vie", 1782.16, 2915.04, 46.768, -1.5091],
+      ["Plouaret", 990.49, 1661.98, 48.6115, -3.4732],
+      ["Sedan", 4617.01, 1020.18, 49.7034, 4.9433],
+      ["Vayrac", 3212.99, 4144.13, 44.9528, 1.7029],
+      ["Coulommiers", 3832.10, 1619.09, 48.8122, 3.0838],
+      ["Morestel", 4945.23, 3643.41, 45.6781, 5.4696],
+      ["Arreau", 2558.56, 5468.16, 42.9049, 0.3593],
+      ["Vauvert", 4430.67, 4956.57, 43.6907, 4.2752],
+      ["Hourtin", 1940.79, 3958.15, 45.186, -1.0573],
+      ["Plombières-les-Bains", 5322.52, 2130.29, 47.9667, 6.4635],
+      ["Arromanches-les-Bains", 2246.07, 1251.93, 49.339, -0.6224],
+    ],
+  },
 ];
 
 /** The known map of this size, if any. */

@@ -46,7 +46,7 @@ import { Session } from './session';
 import { itemBounds, itemDistance, pickTolerance } from './shapes';
 import * as store from './store';
 import { familyOf, toolDef, type Tool, type ToolId } from './tools';
-import { alertDialog, confirmDialog, openDialog, promptNumber, promptText, styleDialog } from './ui/dialogs';
+import { alertDialog, confirmDialog, openDialog, promptNumber, promptText, scaleDialog, styleDialog } from './ui/dialogs';
 import { fmt, h, pickFiles } from './ui/dom';
 import { placeDialog } from './ui/place';
 import { nearbyDialog, type Around } from './ui/nearby';
@@ -217,10 +217,19 @@ export class App {
 
   /* ========================================================= rendering */
 
+  /** Where the stage was on the page at the last resize. */
+  private stageAt: { left: number; top: number } | null = null;
+
   resize(): void {
     const parent = this.canvas.parentElement!;
     const r = parent.getBoundingClientRect();
-    const center = this.project ? this.cam.center() : null;
+    // The options bar above the map wraps on a narrow window, its height changing with the
+    // tool: the stage then moves on the page, and the map must not. Else the center is kept.
+    const dx = this.stageAt ? r.left - this.stageAt.left : 0;
+    const dy = this.stageAt ? r.top - this.stageAt.top : 0;
+    this.stageAt = { left: r.left, top: r.top };
+    const still = this.project && (dx || dy) ? { x: this.cam.panX - dx, y: this.cam.panY - dy } : null;
+    const center = this.project && !still ? this.cam.center() : null;
     this.dpr = window.devicePixelRatio || 1;
     this.cam.width = Math.max(1, r.width);
     this.cam.height = Math.max(1, r.height);
@@ -228,7 +237,11 @@ export class App {
     this.canvas.height = Math.round(this.cam.height * this.dpr);
     this.canvas.style.width = `${this.cam.width}px`;
     this.canvas.style.height = `${this.cam.height}px`;
-    if (center) this.cam.centerOn(center);
+    if (still) {
+      this.cam.panX = still.x;
+      this.cam.panY = still.y;
+      this.cam.clamp();
+    } else if (center) this.cam.centerOn(center);
     this.requestRender();
   }
 
@@ -499,8 +512,10 @@ export class App {
     if (this.options.autoNames) {
       const taken = takenNames(this.project!.layers);
       items = items.map((it) => {
-        // A town keeps no letter of its own: it goes by its name, unless one is given.
-        if (it.kind === 'pixmap' || it.label || it.place) return it;
+        // Points are left unnamed, since their name is written on the map: the
+        // user names the few that deserve it (Objet tab). A town keeps no
+        // letter of its own either: it goes by its name, unless one is given.
+        if (it.kind === 'point' || it.kind === 'pixmap' || it.label || it.place) return it;
         const name = freshName(it.kind, taken);
         taken.add(name);
         return { ...it, label: name };
@@ -744,6 +759,8 @@ export class App {
   }
 
   updateGroup(id: string, patch: Partial<Group>): void {
+    // The new color of the énigme being worked on is that of the next drawings.
+    if (patch.color && this.currentLayerId && groupOf(this.groups(), this.currentLayerId)?.id === id) this.project!.color = patch.color;
     this.setGroups(this.groups().map((g) => (g.id === id ? { ...g, ...patch } : g)));
   }
 
@@ -915,12 +932,32 @@ export class App {
     this.changed();
   }
 
+  /** The projects whose scale was asked in this session: asked once, not at every reopening. */
+  private scaleAsked = new Set<string>();
+
+  /** A map opened without a scale: ask for it (typed, or measured on the map). */
+  async askScale(): Promise<void> {
+    const p = this.project;
+    if (!p || !p.mapFile || unitPerPx(p.scale) || this.scaleAsked.has(p.id)) return;
+    this.scaleAsked.add(p.id);
+    const r = await scaleDialog(p.mapName || p.mapFile, this.units().paper, p.scale.unit);
+    if (this.project !== p) return;
+    if (r.paper !== this.units().paper) this.setUnits({ paper: r.paper });
+    if (r.action === 'save') {
+      this.setScale({ px: r.px, value: r.value, unit: r.unit });
+      this.status(`Échelle définie : ${fmt(r.px, 2)} px = ${fmt(r.value, 3)} ${r.unit}. Reste le calage GPS, dans l'onglet « Carte ».`);
+    } else if (r.action === 'measure') {
+      if (r.unit !== p.scale.unit) this.setScale({ unit: r.unit });
+      this.setTool('calibrate');
+    } else this.status('Échelle non définie : les mesures sont en pixels. Elle se donne dans l\'onglet « Carte ».');
+  }
+
   async calibrate(px: number): Promise<void> {
     const p = this.project!;
     const v = await promptNumber('Échelle de la carte', `Cette distance de ${fmt(px, 2)} px correspond à :`, p.scale.value || 1, {
       min: 0,
       unit: p.scale.unit,
-      hint: 'Saisissez la distance réelle (vous pouvez changer l\'unité km / m dans le panneau Carte).',
+      hint: 'Saisissez la distance réelle (vous pouvez changer l\'unité km / m dans l\'onglet Carte).',
     });
     if (v !== null && v > 0) {
       this.setScale({ px, value: v });
@@ -1030,7 +1067,7 @@ export class App {
     if (!layer) return;
     const g = this.georef();
     if (!g) {
-      await alertDialog('Placer des villes par leur nom', 'Calez d\'abord la carte : panneau « Position GPS », au moins 2 villes (mieux : 6 à 10).');
+      await alertDialog('Placer des villes par leur nom', 'Calez d\'abord la carte : onglet « Carte », au moins 2 villes (mieux : 6 à 10).');
       return;
     }
     const map = this.mapPicture();

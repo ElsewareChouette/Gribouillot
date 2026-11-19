@@ -13,7 +13,7 @@ import { actions, openPalette, type Command } from './commands';
 import { alertDialog, confirmDialog, openDialog, popupMenu } from './dialogs';
 import { $, fmt, h } from './dom';
 import { icon } from './icons';
-import { buildPanel, refreshPanel } from './panel';
+import { buildPanel, refreshPanel, showTab } from './panel';
 import { buildRail, refreshOptions, refreshRail } from './toolbox';
 
 const VERSION = '3.0.0-alpha.2';
@@ -113,7 +113,11 @@ function refreshTopbar(app: App): void {
     stepper.append(...groups.map((g, i) => h('button', {
       type: 'button', role: 'tab', class: `step${i === rank ? ' on' : ''}${app.untilRank !== null && i > app.untilRank ? ' later' : ''}`,
       style: `--g:${g.color}`, title: `${i + 1}. ${g.code} — ${g.title}`, 'aria-selected': String(i === rank),
-      onclick: () => app.openGroup(g.id),
+      onclick: () => {
+        // Its layers are what one wants to see: the « Carte » tab gives way.
+        showTab(app, 'layers');
+        app.openGroup(g.id);
+      },
     }, g.code)),
     h('label', { class: 'opt-toggle state', title: 'N\'afficher que les énigmes jusqu\'à celle en cours : ce que le chercheur avait sous les yeux à cette étape' },
       h('input', { type: 'checkbox', checked: app.untilRank !== null, onchange: () => app.toggleStateView() }), 'état à cette énigme'));

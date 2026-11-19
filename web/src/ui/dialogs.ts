@@ -1,6 +1,7 @@
 /** Modal dialogs built on <dialog>, returning promises. */
 
 import { h } from './dom';
+import { DARK_COLORS, isDark } from '../colors';
 
 interface Button<T> {
   label: string;
@@ -102,11 +103,6 @@ export async function promptNumber(
   return Number.isFinite(v) ? v : null;
 }
 
-const PALETTE = [
-  '#000000', '#ffffff', '#ff0000', '#ff8800', '#ffee00', '#00c000', '#00b0ff', '#0000ff',
-  '#aa00ff', '#ff00ff', '#8b4513', '#808080', '#55007f', '#006400', '#00ffff', '#ff69b4',
-];
-
 /** Color and thickness. Either can be left unchanged (null). */
 export async function styleDialog(
   title: string,
@@ -116,7 +112,7 @@ export async function styleDialog(
   opts: { showColor?: boolean; showWidth?: boolean } = {},
 ): Promise<{ color: string; width: number } | null> {
   const showColor = opts.showColor ?? true, showWidth = opts.showWidth ?? true;
-  const colorInput = h('input', { type: 'color', value: color });
+  const colorInput = h('input', { type: 'color', value: color, title: 'Une autre couleur (les couleurs claires se voient mal sur la carte)' });
   const widthInput = h('input', { type: 'range', min: 1, max: 30, step: 1, value: String(width) });
   const widthValue = h('output', {}, `${width} px`);
   const preview = h('div', { class: 'stroke-preview' });
@@ -127,7 +123,8 @@ export async function styleDialog(
   widthInput.addEventListener('input', update);
   colorInput.addEventListener('input', update);
   const swatches = h('div', { class: 'swatches' });
-  for (const c of [...new Set([...customColors, ...PALETTE])].slice(0, 24)) {
+  // Dark colors only (those of the project that are, then the usual ones): the field beside takes any other.
+  for (const c of [...new Set([...customColors.filter(isDark), ...DARK_COLORS])].slice(0, 24)) {
     swatches.append(h('button', {
       type: 'button',
       class: 'swatch',
@@ -193,4 +190,77 @@ export function popupMenu<T>(x: number, y: number, entries: ({ label: string; va
       window.addEventListener('keydown', esc, true);
     });
   });
+}
+
+/** The dark colors, under a button. Resolves with the one chosen, or null. */
+export function colorPopup(anchor: HTMLElement, current: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const menu = h('div', { class: 'popup-menu color-pop', role: 'menu' });
+    let done = false;
+    const close = (v: string | null) => {
+      if (done) return;
+      done = true;
+      menu.remove();
+      window.removeEventListener('pointerdown', outside, true);
+      window.removeEventListener('keydown', esc, true);
+      resolve(v);
+    };
+    const outside = (e: Event) => {
+      if (!menu.contains(e.target as Node)) close(null);
+    };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      close(null);
+    };
+    const other = h('input', { type: 'color', value: current, 'aria-label': 'Autre couleur' });
+    other.addEventListener('change', () => close(other.value.toLowerCase()));
+    menu.append(
+      h('div', { class: 'swatches' }, ...DARK_COLORS.map((c) => h('button', {
+        type: 'button', class: `swatch${c === current.toLowerCase() ? ' on' : ''}`, title: c, style: `background:${c}`, onclick: () => close(c),
+      }))),
+      h('label', { class: 'other-color', title: 'Les couleurs claires se voient mal sur la carte' }, other, 'Autre couleur…'));
+    document.body.append(menu);
+    const a = anchor.getBoundingClientRect();
+    const r = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, Math.min(a.left, window.innerWidth - r.width - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(a.bottom + 2, window.innerHeight - r.height - 4))}px`;
+    setTimeout(() => {
+      window.addEventListener('pointerdown', outside, true);
+      window.addEventListener('keydown', esc, true);
+    });
+  });
+}
+
+export interface ScaleAnswer {
+  /** Save what was typed, measure the scale on the map, or leave it for later. */
+  action: 'save' | 'measure' | 'later';
+  paper: number;
+  px: number;
+  value: number;
+  unit: 'km' | 'm';
+}
+
+/** Asked when a map is opened without a scale: type it, or go and measure it on the map. */
+export async function scaleDialog(mapName: string, paper: number, unit: 'km' | 'm'): Promise<ScaleAnswer> {
+  const num = (attrs: Record<string, unknown>) => h('input', { type: 'number', min: 0, step: 'any', ...attrs });
+  const paperIn = num({ value: String(paper), title: 'L\'échelle imprimée sur la carte : 1 000 000 pour une carte au 1 : 1 000 000' });
+  const pxIn = num({ placeholder: 'pixels' });
+  const valueIn = num({ placeholder: 'distance' });
+  const unitIn = h('select', {}, h('option', { value: 'km', selected: unit === 'km' }, 'km'), h('option', { value: 'm', selected: unit === 'm' }, 'm'));
+  const body = h('div', { class: 'scale-dlg options' },
+    h('p', {}, `La carte « ${mapName} » n'a pas d'échelle : sans elle, les distances sont en pixels.`),
+    h('label', {}, 'Échelle imprimée sur la carte', h('span', { class: 'row' }, '1 : ', paperIn)),
+    h('label', {}, 'Une distance connue, en pixels de l\'image', h('span', { class: 'row' }, pxIn, 'px =', valueIn, unitIn)),
+    h('p', { class: 'hint' }, 'Vous ne connaissez pas la distance en pixels ? « Mesurer sur la carte » : vous cliquez les 2 extrémités d\'une distance connue (l\'échelle graphique de la carte, deux villes), puis vous donnez sa longueur.'),
+    h('p', { class: 'hint' }, 'Tout se retrouve et se corrige dans l\'onglet « Carte », avec le calage GPS (placer quelques villes) qui donne la position des points.'));
+  const read = (el: HTMLInputElement) => parseFloat(el.value.replace(',', '.')) || 0;
+  let action = await openDialog<ScaleAnswer['action']>('Échelle de la carte', body, [
+    { label: 'Plus tard', value: 'later' },
+    { label: 'Mesurer sur la carte', value: 'measure' },
+    { label: 'Enregistrer', value: 'save', primary: true },
+  ]) ?? 'later';
+  // « Enregistrer » without a distance: the map is to be measured.
+  if (action === 'save' && !(read(pxIn) > 0 && read(valueIn) > 0)) action = 'measure';
+  return { action, paper: read(paperIn) || paper, px: read(pxIn), value: read(valueIn), unit: unitIn.value as 'km' | 'm' };
 }
